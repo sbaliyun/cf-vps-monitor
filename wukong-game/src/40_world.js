@@ -524,7 +524,7 @@ const World = (() => {
   }
 
   function buildLights() {
-    hemi = new THREE.HemisphereLight(0xa4b2c8, 0x4a3f30, 0.9);
+    hemi = new THREE.HemisphereLight(0xa4b2c8, 0x4a3f30, 1.15);
     scene.add(hemi);
     sun = new THREE.DirectionalLight(CONFIG.SUN_COLOR, 3.4);
     sun.castShadow = quality.shadows > 0;

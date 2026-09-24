@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 const CONFIG = {
   // direction TOWARDS the sun (late afternoon, low in the north-west, behind the temple)
-  SUN_DIR: new THREE.Vector3(-0.42, 0.30, -0.86).normalize(),
+  SUN_DIR: new THREE.Vector3(-0.42, 0.52, -0.78).normalize(),
   SUN_COLOR: new THREE.Color(1.0, 0.78, 0.55),
   FOG_COLOR: new THREE.Color(0.50, 0.50, 0.50),
   FOG_SUN_COLOR: new THREE.Color(1.0, 0.72, 0.45),

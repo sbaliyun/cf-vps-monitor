@@ -56,6 +56,7 @@ const Props = (() => {
   const TEX = {};
   const textJobs = []; // canvases that contain calligraphy; redrawn when the web font arrives
   function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  const ctx2d = c => c.getContext('2d', { willReadFrequently: true });
   function finishTex(c, srgb, repeat = true) {
     const t = new THREE.CanvasTexture(c);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
@@ -68,7 +69,7 @@ const Props = (() => {
     return t;
   }
   function heightToNormalCanvas(hgt, w, h, strength) {
-    const c = mkCanvas(w, h), ctx = c.getContext('2d'), img = ctx.createImageData(w, h), d = img.data;
+    const c = mkCanvas(w, h), ctx = ctx2d(c), img = ctx.createImageData(w, h), d = img.data;
     for (let y = 0; y < h; y++) {
       const ya = ((y - 1 + h) % h) * w, yb = ((y + 1) % h) * w, yr = y * w;
       for (let x = 0; x < w; x++) {
@@ -93,7 +94,7 @@ const Props = (() => {
     fill(P);
     const out = {};
     {
-      const c = mkCanvas(w, h), ctx = c.getContext('2d'), img = ctx.createImageData(w, h), d = img.data;
+      const c = mkCanvas(w, h), ctx = ctx2d(c), img = ctx.createImageData(w, h), d = img.data;
       for (let i = 0; i < n; i++) {
         d[i * 4] = col[i * 3] * 255; d[i * 4 + 1] = col[i * 3 + 1] * 255; d[i * 4 + 2] = col[i * 3 + 2] * 255;
         d[i * 4 + 3] = alp ? alp[i] * 255 : 255;
@@ -105,7 +106,7 @@ const Props = (() => {
     }
     if (opts.normal) out.normalMap = finishTex(heightToNormalCanvas(hgt, w, h, opts.normal), false, opts.repeat !== false);
     if (opts.roughMap) {
-      const c = mkCanvas(w, h), ctx = c.getContext('2d'), img = ctx.createImageData(w, h), d = img.data;
+      const c = mkCanvas(w, h), ctx = ctx2d(c), img = ctx.createImageData(w, h), d = img.data;
       for (let i = 0; i < n; i++) { d[i * 4] = 0; d[i * 4 + 1] = rgh[i] * 255; d[i * 4 + 2] = met[i] * 255; d[i * 4 + 3] = 255; }
       ctx.putImageData(img, 0, 0);
       out.roughnessMap = finishTex(c, false, opts.repeat !== false);
@@ -232,13 +233,13 @@ const Props = (() => {
       const { w, h } = P;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const u = x / w, v = y / h, i = y * w + x;
-        const n1 = NZ.fbm(u, v, 3, 3, 5, 21), n2 = NZ.fbm(u, v, 12, 12, 4, 22), st = NZ.fbm(u, v, 12, 2, 4, 23) * 0.7 + NZ.fbm(u, v, 3, 3, 3, 28) * 0.3;
-        const fl = NZ.fbm(u, v, 2, 2, 5, 24) * 0.8 + NZ.fbm(u, v, 8, 8, 3, 26) * 0.2;
-        const crk = 1 - Math.abs(NZ.fbm(u, v, 6, 6, 4, 25) * 2 - 1);
+        const n1 = NZ.fbm(u, v, 3, 3, 4, 21), n2 = NZ.fbm(u, v, 12, 12, 3, 22), st = NZ.fbm(u, v, 12, 2, 3, 23) * 0.7 + n1 * 0.3;
+        const fl = NZ.fbm(u, v, 2, 2, 4, 24) * 0.8 + n2 * 0.2;
+        const crk = 1 - Math.abs(NZ.fbm(u, v, 6, 6, 3, 25) * 2 - 1);
         const fade = smooth(0.3, 0.8, n1);
         let r = lerp(0.5, 0.6, fade), g = lerp(0.24, 0.35, fade), b = lerp(0.18, 0.27, fade);
         let k = (0.9 + 0.25 * (n2 - 0.5)) * (1 - smooth(0.52, 0.78, st) * 0.18);
-        const crack = smooth(0.975, 0.996, crk) * smooth(0.52, 0.7, NZ.fbm(u, v, 3, 3, 3, 27));
+        const crack = smooth(0.975, 0.996, crk) * smooth(0.52, 0.7, NZ.fbm(u, v, 3, 3, 2, 27));
         k *= 1 - crack * 0.45;
         r *= k; g *= k; b *= k;
         const f1 = smooth(0.7, 0.72, fl), f0 = smooth(0.66, 0.7, fl) - f1;
@@ -371,7 +372,7 @@ const Props = (() => {
   // 旋子彩画 (faded) for beams: whole pattern mapped along each beam
   function texBeam() {
     if (TEX.beam) return TEX.beam;
-    const W = 512, H = 128, c = mkCanvas(W, H), g = c.getContext('2d');
+    const W = 512, H = 128, c = mkCanvas(W, H), g = ctx2d(c);
     const BLUE = '#3b5566', GREEN = '#4b6a58', DARK = '#1d2124', WHITE = '#c2beaf', RED = '#7c3a2a', OCHRE = '#a08450';
     g.fillStyle = GREEN; g.fillRect(0, 0, W, H);
     const band = (x, wd, col) => { g.fillStyle = col; g.fillRect(x, 0, wd, H); };
@@ -443,8 +444,8 @@ const Props = (() => {
       g.beginPath(); g.ellipse(W / 2, 414, 58, 32, 0, 0, TAU); g.strokeStyle = hmode ? '#e8e8e8' : '#96452f'; g.lineWidth = 4; g.stroke();
       panel(484, 22);
     };
-    const c = mkCanvas(W, H), g = c.getContext('2d'); draw(g, false); weatherCanvas(g, W, H, 0.9, 131);
-    const ch = mkCanvas(W, H), gh = ch.getContext('2d'); draw(gh, true);
+    const c = mkCanvas(W, H), g = ctx2d(c); draw(g, false); weatherCanvas(g, W, H, 0.9, 131);
+    const ch = mkCanvas(W, H), gh = ctx2d(ch); draw(gh, true);
     const id = gh.getImageData(0, 0, W, H).data, hgt = new Float32Array(W * H);
     for (let i = 0; i < W * H; i++) hgt[i] = id[i * 4] / 255;
     TEX.door = { map: finishTex(c, true, false), normalMap: finishTex(heightToNormalCanvas(hgt, W, H, 3), false, false) };
@@ -454,7 +455,7 @@ const Props = (() => {
   // 山门 plank door with golden studs
   function texGateDoor() {
     if (TEX.gateDoor) return TEX.gateDoor;
-    const W = 256, H = 512, c = mkCanvas(W, H), g = c.getContext('2d');
+    const W = 256, H = 512, c = mkCanvas(W, H), g = ctx2d(c);
     g.fillStyle = '#5c1f16'; g.fillRect(0, 0, W, H);
     for (let k = 0; k < 6; k++) { g.fillStyle = k % 2 ? '#62241a' : '#571d14'; g.fillRect(k * W / 6, 0, 2, H); }
     for (let r = 0; r < 9; r++) for (let q = 0; q < 7; q++) {
@@ -483,7 +484,7 @@ const Props = (() => {
   }
   function textTexture(key, W, H, draw) {
     if (TEX[key]) return TEX[key];
-    const c = mkCanvas(W, H), g = c.getContext('2d');
+    const c = mkCanvas(W, H), g = ctx2d(c);
     const job = { draw: () => { g.clearRect(0, 0, W, H); draw(g, W, H); } };
     job.draw();
     const tex = finishTex(c, true, false);
@@ -577,7 +578,7 @@ const Props = (() => {
   }
   function texLantern() {
     if (TEX.lantern) return TEX.lantern;
-    const W = 128, H = 128, c = mkCanvas(W, H), g = c.getContext('2d');
+    const W = 128, H = 128, c = mkCanvas(W, H), g = ctx2d(c);
     const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#551008'); gr.addColorStop(0.5, '#ffb070'); gr.addColorStop(1, '#551008');
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
     g.fillStyle = 'rgba(40,5,0,0.45)'; for (let k = 0; k < 8; k++) g.fillRect(k * 16, 0, 3, H);
@@ -1395,7 +1396,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
   function flight(b, res, o) {
     const { w, n, rise, run } = o, zf = o.zFront, y0 = o.y0 || 0, yb = o.bottom ?? -0.3;
     for (let i = 0; i < n; i++) {
-      const yTop = y0 + (i + 1) * rise, zF = zf - i * run + 0.03, zB = zf - (i + 1) * run - 0.02;
+      const yTop = y0 + (i + 1) * rise, zF = zf - i * run, zB = zf - (i + 1) * run - (i < n - 1 ? 0.02 : 0);
       const g = box(w, yTop - yb, zF - zB); T(g, o.x || 0, (yTop + yb) / 2, (zF + zB) / 2);
       uvProj(g, 0.55, rnd(0, 5), rnd(0, 5)); jitter(g, 0.14);
       shade(g, (x, y, z, nx, ny) => (ny > 0.9 ? 1.06 : 0.92));
@@ -1703,7 +1704,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
         T(g, dx + s * lw, baseH, -wt / 2, ang);
         b.add('gateDoor', g);
         const hx2 = dx + s * lw, dirx = -s * Math.cos(1.72), dirz = -Math.sin(1.72);
-        res.colliders.push(boxC(hx2 + dirx * lw / 2 + s * 0.05, -wt / 2 + dirz * lw / 2, 0.08, lw / 2, 0));
+        res.colliders.push(boxC(hx2 + dirx * lw / 2, -wt / 2 + dirz * lw / 2, 0.07, lw / 2, Math.atan2(dirx, dirz)));
       }
       const thr = box(dw + 0.1, 0.12, wt + 0.05); T(thr, dx, baseH + 0.02, 0); addP(b, 'stone', thr, 0.1);
     }
