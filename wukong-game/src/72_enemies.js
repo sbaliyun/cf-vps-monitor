@@ -139,8 +139,9 @@ class Enemy extends Actor {
     this.fireLight = null; this.bladeFire = 0;
     this.lib = kind === 'wight' ? Anim.H : kind === 'guangzhi' ? Anim.G : Anim.W;
     this.setupStances();
-    if (kind === 'guangzhi') this.trail = FX.makeTrail([1.0, 0.45, 0.15], 40);
+    if (kind === 'guangzhi') this.trail = FX.makeTrail([0.7, 0.72, 0.8], 40);
     else if (kind !== 'wight') this.trail = FX.makeTrail([0.75, 0.8, 0.9], 30);
+    if (this.trail) this.trail.mat.uniforms.intensity.value = 0.55;
     this.reset();
   }
   setupStances() {
@@ -175,6 +176,7 @@ class Enemy extends Actor {
     this.rig.root.visible = true; this.active = true; this.phase2 = false; this.bladeFire = 0;
     if (this.seal) this.seal.material.opacity = 0;
     if (this.model.materials.blade) this.model.materials.blade.emissiveIntensity = 0;
+    if (this.trail && this.kind === 'guangzhi') { this.trail.mat.uniforms.color.value.setRGB(0.7, 0.72, 0.8); this.trail.mat.uniforms.intensity.value = 0.55; }
     this.model.meshes.forEach(m => m.castShadow = true);
     this.cooldown = 1; this.syncRoot();
     if (this.hpBar) this.hpBar.hidden = true;
@@ -449,7 +451,7 @@ class Enemy extends Actor {
       if (player.alive && Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < clip.aoe.r + player.radius && !this.hitSet.has(player)) {
         Game.damagePlayer({ amount: clip.aoe.dmg * (this.phase2 ? 1.12 : 1), from: this, point: player.pos.clone().setY(player.pos.y + 0.8), dir: U.tmpV[14].subVectors(player.pos, p).setY(0).normalize().clone(), kind: fire ? 'fire' : 'blunt', knock: clip.aoe.knock });
       }
-      if (clip === Anim.G.burst) { this.bladeFire = 1; }
+      if (clip === Anim.G.burst) { this.bladeFire = 1; if (this.trail) { this.trail.mat.uniforms.color.value.setRGB(1.0, 0.42, 0.12); this.trail.mat.uniforms.intensity.value = 1.0; } }
     }
     // fire wave
     if (clip.wave && !this.waveDone && t >= clip.wave) { this.waveDone = true; this.spawnFireWave(player); }

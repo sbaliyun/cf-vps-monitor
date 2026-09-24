@@ -3346,7 +3346,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     const pr = [[-0.45, 0], [0.4, 0], [0.42, 0.18], [0.3, 0.3], [0.34, 0.62], [0.48, 0.72], [0.46, 0.88], [0.28, 0.98], [0.12, 0.9], [0.08, 0.62], [-0.12, 0.5], [-0.3, 0.52], [-0.45, 0.4]];
     const k = 0.26 * s;
     const g = extrudeXY(pr.map(p => [p[0] * k, p[1] * k]), 0.09 * s, 0.012 * s);
-    g.rotateY(-PI / 2); prep(g); uvProj(g, 2);
+    g.rotateY(-PI / 2); prep(g); uvMap(g, (u, v) => [0.125 + u * 0.1, 0.4 + v * 0.1]);
     BEAST[key] = g; return g;
   }
   function chiwenGeo(hgt, thick) {
@@ -3356,6 +3356,9 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     const fin = box(0.07 * k, 0.4 * k, thick * 0.45); T(fin, 0.12 * k, 1.28 * k, 0, 0, 0, 0.35);
     prep(g); prep(fin);
     const out = mergeGeometries([g, fin], false); g.dispose(); fin.dispose();
+    // sample a narrow barrel-tile strip so the ornament reads as one glazed casting
+    const p = out.attributes.position, uv = out.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.125 + p.getX(i) * 0.02 + p.getZ(i) * 0.03, 0.3 + p.getY(i) * 0.08);
     return out;
   }
   const RIDGE_T = [0.62, 0.66, 0.64];
@@ -3448,7 +3451,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
       for (let i = 0; i <= n; i++) { const x = lerp(-gext + 0.05, gext - 0.05, i / n), t = Math.abs(x) / gext; rp.push([x, yR + o.ridgeCurve * Math.pow(t, 4), 0]); }
       lineRidge(b, rp, ridgeW, ridgeH, key);
       if (o.chiwen !== false) {
-        const cw = chiwenGeo(ridgeH * 2.6, ridgeW * 0.9);
+        const cw = chiwenGeo(ridgeH * 2.6 * (o.chiwenS || 1), ridgeW * 0.9);
         for (const side of [-1, 1]) { const g = cw.clone(); T(g, side * (gext - 0.35), yR + o.ridgeCurve + ridgeH * 0.5, 0, side > 0 ? 0 : PI); tint(g, 0.52, 0.6, 0.55); b.add(key, g); }
       }
       return { rf, y0, H, yR, ridgeTop: yR + ridgeH, gx, gext, dsk, faces };
@@ -3713,9 +3716,8 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     }
     // roof (small hip roof)
     const ov = 0.42, ax = bw / 2 + ov, az = bd / 2 + ov;
-    const r = hallRoof(b, { type: 'hip', ax, az, pitch: 0.95, ov, soffit: y0 + bh + 0.36, th: 0.16, ridgeW: 0.18, ridgeH: 0.2, curl: 0.06, tipS: 0.3, beasts: 0, ridgeCurve: 0.04, chiwenS: 0.55,
+    hallRoof(b, { type: 'hip', ax, az, pitch: 0.95, ov, soffit: y0 + bh + 0.36, th: 0.16, ridgeW: 0.18, ridgeH: 0.2, curl: 0.06, tipS: 0.3, beasts: 0, ridgeCurve: 0.04, chiwenS: 0.55,
       roof: { L: 0.22, lam: 0.4, lamD: 0.35, L2: 0.05, lam2: 1.2, lamD2: 0.6, F: 0.05, sp: 0.2, gridU: 0.2, gridD: 0.2, rowSeg: 0.4, rafters: false, underKey: 'painted', fasciaKey: 'painted', underTint: [sl(0.3), sl(0.2), sl(0.14)] } });
-    void r;
     // bronze incense pot in front, on a stone block
     const pz = 1.5;
     const blk = box(0.6, 0.55, 0.5); T(blk, 0, 0.275, pz); addP(b, 'stone', blk, 0.1);
@@ -3784,7 +3786,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     const yJ = lower.yTop;
     // upper storey
     const ux = cx - inset, uz = cz - inset;
-    const uxs = lin(-ux, ux, nbx >= 5 ? 3 : 2), uzs = lin(-uz, uz, 2), uTop = yJ + 1.75, uBase = yJ - 0.8;
+    const uxs = lin(-ux, ux, nbx >= 5 ? 3 : 2), uzs = lin(-uz, uz, 2), uTop = yJ + 1.6, uBase = yJ - 0.8;
     for (const [x, z] of perimeterCols(uxs, uzs)) column(b, x, z, uBase, uTop - uBase, colR * 0.9);
     ringBeams(b, uxs, uzs, uTop, 0.42);
     for (let i = 0; i < uxs.length - 1; i++) for (const s of [-1, 1]) {
@@ -3796,10 +3798,9 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     const hb2 = 0.85, yB2 = uTop + 0.12;
     bracketRing(b, uxs, uzs, yB2, hb2, 2);
     const ov2 = 2.2;
-    const upper = hallRoof(b, { type: 'xieshan', ax: ux + ov2, az: uz + ov2, pitch: 0.66, ov: ov2, soffit: yB2 + hb2, th: 0.36, skirtIn: 1.0, og: 0.5,
-      ridgeW: 0.42, ridgeH: 0.85, ridgeCurve: 0.25, curl: 0.32, beasts: 5, beastS: 1.0,
+    hallRoof(b, { type: 'xieshan', ax: ux + ov2, az: uz + ov2, pitch: 0.64, ov: ov2, soffit: yB2 + hb2, th: 0.36, skirtIn: 1.0, og: 0.5,
+      ridgeW: 0.42, ridgeH: 0.78, ridgeCurve: 0.25, chiwenS: 0.85, curl: 0.32, beasts: 5, beastS: 1.0,
       roof: { L: 1.0, lam: 1.9, lamD: 1.1, L2: 0.2, lam2: 5, lamD2: 2.5, F: 0.5, sp: 0.36, rowSeg: 0.85, gridU: 0.75, gridD: 0.6 } });
-    void upper;
     plaqueAt(b, plaque, 3.3, 1.24, 0, (yJ + 0.35 + uTop - 0.2) / 2 + 0.1, uz + 0.32, 0.14);
     // lanterns under front eave
     const lx = nbx >= 5 ? xs[Math.floor(nbx / 2) + 1] : (xs[1] - xs[0]) * 0.5;
@@ -3962,9 +3963,6 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     const lvlH = 2.6, kept = ruined ? Math.max(2, Math.ceil(levels * 0.55)) : levels;
     const inner = new THREE.Group();
     const bodyR = i => 3.0 * (1 - 0.052 * i);
-    const eaves = [];
-    const bells = new Batch();
-    void bells;
     for (let i = 0; i < kept; i++) {
       const yb = yBase + i * lvlH, R = bodyR(i), Rn = bodyR(i + 1), last = i === kept - 1;
       const broken = ruined && last;
@@ -4029,17 +4027,12 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
       const keepFace = ruined && i === kept - 2 ? (() => rnd() > 0.35) : null;
       const fl = keepFace ? faces.filter(keepFace) : faces;
       const rf = roof(b, { faces: fl, y0, D, H, th: 0.2, L: 0.34, lam: 0.55, lamD: 0.45, L2: 0.06, lam2: 1.5, lamD2: 1, F: 0.16, sp: 0.34, gridU: 0.42, gridD: 0.42, rowSeg: 0.8, rafters: false, underKey: 'brick', fasciaKey: 'brick' });
-      eaves.push({ rf, faces: fl, cut });
       for (const f of fl) {
         hipRidge(b, rf, f, 1, (isTop ? apE : cut) - 0.05, { w: 0.16, h: 0.16, curl: 0.1, tipS: 0.5, beasts: 0 });
         // wind bell at corner tip
         const tp = rf.surf(f, f.half + 0.25, -0.25);
         const bl = lathe([[0.09, 0], [0.065, 0.1], [0.03, 0.17], [0, 0.18]], 6); T(bl, tp[0], tp[1] - 0.42, tp[2]); b.add('bronze', uvProj(bl, 1));
         const rp = box(0.015, 0.26, 0.015); T(rp, tp[0], tp[1] - 0.14, tp[2]); b.add('bronze', uvProj(rp, 1));
-      }
-      if (!isTop) {
-        const faces2 = polyFaces(N, apN + 0.02, 0);
-        void faces2;
       }
       if (isTop) {
         // 塔刹 finial
@@ -4124,7 +4117,6 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     const roofOpts = (L) => ({ L, lam: 0.7, lamD: 0.55, L2: 0.08, lam2: 2, lamD2: 1, F: 0.22, sp: 0.24, gridU: 0.3, gridD: 0.3, rowSeg: 0.5, rafters: false, tileKey: 'tileStone', underKey: 'stone', fasciaKey: 'stone' });
     hallRoof(b, { type: 'hip', ax: ci + 0.85, az: 1.25, pitch: 0.95, ov: 0.9, soffit: 7.14, th: 0.2, ridgeW: 0.26, ridgeH: 0.34, ridgeCurve: 0.08, curl: 0.16, beasts: 0, roof: roofOpts(0.45) });
     for (const s of [-1, 1]) {
-      const g = new Batch(); void g;
       const sub = new Batch();
       hallRoof(sub, { type: 'hip', ax: (co - ci) / 2 + 0.75, az: 1.1, pitch: 0.95, ov: 0.8, soffit: 5.5, th: 0.18, ridgeW: 0.22, ridgeH: 0.28, ridgeCurve: 0.05, curl: 0.14, beasts: 0, roof: roofOpts(0.38) });
       for (const [key, list] of sub.m) for (const geo of list) { T(geo, s * (ci + co) / 2 + s * 0.12, 0, 0); b.add(key, geo); }
@@ -9498,8 +9490,9 @@ class Enemy extends Actor {
     this.fireLight = null; this.bladeFire = 0;
     this.lib = kind === 'wight' ? Anim.H : kind === 'guangzhi' ? Anim.G : Anim.W;
     this.setupStances();
-    if (kind === 'guangzhi') this.trail = FX.makeTrail([1.0, 0.45, 0.15], 40);
+    if (kind === 'guangzhi') this.trail = FX.makeTrail([0.7, 0.72, 0.8], 40);
     else if (kind !== 'wight') this.trail = FX.makeTrail([0.75, 0.8, 0.9], 30);
+    if (this.trail) this.trail.mat.uniforms.intensity.value = 0.55;
     this.reset();
   }
   setupStances() {
@@ -9534,6 +9527,7 @@ class Enemy extends Actor {
     this.rig.root.visible = true; this.active = true; this.phase2 = false; this.bladeFire = 0;
     if (this.seal) this.seal.material.opacity = 0;
     if (this.model.materials.blade) this.model.materials.blade.emissiveIntensity = 0;
+    if (this.trail && this.kind === 'guangzhi') { this.trail.mat.uniforms.color.value.setRGB(0.7, 0.72, 0.8); this.trail.mat.uniforms.intensity.value = 0.55; }
     this.model.meshes.forEach(m => m.castShadow = true);
     this.cooldown = 1; this.syncRoot();
     if (this.hpBar) this.hpBar.hidden = true;
@@ -9808,7 +9802,7 @@ class Enemy extends Actor {
       if (player.alive && Math.hypot(player.pos.x - p.x, player.pos.z - p.z) < clip.aoe.r + player.radius && !this.hitSet.has(player)) {
         Game.damagePlayer({ amount: clip.aoe.dmg * (this.phase2 ? 1.12 : 1), from: this, point: player.pos.clone().setY(player.pos.y + 0.8), dir: U.tmpV[14].subVectors(player.pos, p).setY(0).normalize().clone(), kind: fire ? 'fire' : 'blunt', knock: clip.aoe.knock });
       }
-      if (clip === Anim.G.burst) { this.bladeFire = 1; }
+      if (clip === Anim.G.burst) { this.bladeFire = 1; if (this.trail) { this.trail.mat.uniforms.color.value.setRGB(1.0, 0.42, 0.12); this.trail.mat.uniforms.intensity.value = 1.0; } }
     }
     // fire wave
     if (clip.wave && !this.waveDone && t >= clip.wave) { this.waveDone = true; this.spawnFireWave(player); }
