@@ -1,0 +1,321 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>天命人·黑风山</title>
+<meta name="description" content="非官方同人致敬作品：浏览器中的三维西游动作 RPG">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;900&display=swap">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #0b0a09;
+    --ink-2: #16130f;
+    --bone: #e8e0cc;
+    --bone-dim: #a9a08c;
+    --gold: #c8a45a;
+    --gold-hi: #f0cf86;
+    --seal: #a8261b;
+    --spirit: #6fa8d8;
+    --stam: #d9b25a;
+    --hp-trail: #8a2a1e;
+    --brush: "Ma Shan Zheng", "STXingkai", "KaiTi", "STKaiti", serif;
+    --serif: "Noto Serif SC", "Songti SC", "SimSun", "Source Han Serif SC", serif;
+    --gut: 16px;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; background: var(--ink); overflow: hidden; }
+  body { font-family: var(--serif); color: var(--bone); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; width: 100%; height: 100%; }
+  .layer { position: fixed; inset: 0; pointer-events: none; }
+  .layer.interactive { pointer-events: auto; }
+  button { font-family: var(--serif); }
+  button:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 3px; }
+
+  /* ---------- loading ---------- */
+  #loading { background: var(--ink); display: grid; place-items: center; z-index: 50; transition: opacity 1.2s ease; }
+  #loading .ld { display: grid; gap: 18px; justify-items: center; }
+  #loading .ld-glyph { font-family: var(--brush); font-size: clamp(64px, 12vw, 120px); color: var(--bone); opacity: .9; line-height: 1; }
+  #loading .ld-bar { width: min(280px, 60vw); height: 2px; background: #2a251d; position: relative; overflow: hidden; }
+  #loading .ld-bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, var(--gold), var(--gold-hi)); transition: width .3s; }
+  #loading .ld-txt { font-size: 13px; letter-spacing: .3em; color: var(--bone-dim); }
+
+  /* ---------- title ---------- */
+  #title { z-index: 40; background: linear-gradient(90deg, rgba(8,7,6,.86) 0%, rgba(8,7,6,.55) 38%, rgba(8,7,6,0) 70%); transition: opacity 1s ease; }
+  #title .t-wrap { position: absolute; inset: 0; display: flex; align-items: center; gap: clamp(20px, 5vw, 70px); padding-inline: max(var(--gut), 6vw); }
+  #title .t-name { display: flex; flex-direction: column; align-items: center; font-family: var(--brush); font-size: clamp(72px, 13vh, 150px); line-height: 1.02; color: var(--bone); text-shadow: 0 0 40px rgba(0,0,0,.6); position: relative; }
+  #title .t-name > span { display: block; }
+  #title .t-seal { position: absolute; left: -40px; bottom: 8px; width: 1.3em; font-size: 20px !important; line-height: 1.12; text-align: center; color: #f3d9c9; background: var(--seal); padding: 7px 3px; border-radius: 3px; box-shadow: inset 0 0 0 2px rgba(255,220,200,.25); text-shadow: none; }
+  #title .t-side { display: grid; gap: 28px; max-width: 420px; }
+  #title .t-sub { font-family: var(--brush); font-size: clamp(24px, 3.4vh, 34px); color: var(--gold-hi); letter-spacing: .12em; }
+  #title .t-lede { font-size: 14px; line-height: 1.9; color: var(--bone-dim); max-width: 34ch; }
+  #title nav { display: grid; gap: 6px; justify-items: start; }
+  .menu-btn { pointer-events: auto; background: none; border: 0; color: var(--bone); font-size: 20px; letter-spacing: .35em; padding: 8px 0 8px 22px; cursor: pointer; position: relative; font-weight: 600; transition: color .2s, letter-spacing .3s; }
+  .menu-btn::before { content: ""; position: absolute; left: 0; top: 50%; width: 10px; height: 10px; transform: translateY(-50%) rotate(45deg) scale(.5); border: 1px solid var(--gold); opacity: .4; transition: all .25s; }
+  .menu-btn:hover, .menu-btn:focus-visible { color: var(--gold-hi); letter-spacing: .45em; }
+  .menu-btn:hover::before, .menu-btn:focus-visible::before { transform: translateY(-50%) rotate(45deg) scale(1); opacity: 1; background: var(--gold); }
+  .menu-btn.small { font-size: 15px; letter-spacing: .25em; font-weight: 400; color: var(--bone-dim); }
+  #title .t-foot { position: absolute; left: max(var(--gut), 6vw); right: var(--gut); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); font-size: 12px; color: #7d7564; letter-spacing: .08em; line-height: 1.7; }
+  .opt-row { display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--bone-dim); flex-wrap: wrap; }
+  .opt-row .seg { display: inline-flex; border: 1px solid #4a4131; }
+  .opt-row .seg button { pointer-events: auto; background: transparent; color: var(--bone-dim); border: 0; padding: 5px 12px; cursor: pointer; font-size: 13px; letter-spacing: .1em; }
+  .opt-row .seg button.on { background: var(--gold); color: var(--ink); }
+  .opt-row input[type=range] { pointer-events: auto; accent-color: var(--gold); width: 120px; }
+
+  /* ---------- panels (controls / pause) ---------- */
+  .panel { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(6,5,4,.72); z-index: 45; pointer-events: auto; padding-inline: var(--gut); }
+  .panel .box { width: min(640px, 100%); max-height: 86vh; overflow: auto; background: linear-gradient(180deg, rgba(24,20,15,.96), rgba(12,10,8,.96)); border: 1px solid #3b3326; box-shadow: 0 30px 80px rgba(0,0,0,.6); padding: 28px clamp(18px, 4vw, 40px); }
+  .panel h2 { font-family: var(--brush); font-weight: 400; font-size: 40px; margin: 0 0 18px; color: var(--gold-hi); letter-spacing: .12em; }
+  .keys { display: grid; grid-template-columns: max-content 1fr; gap: 10px 22px; font-size: 14px; align-items: baseline; }
+  .keys kbd { font-family: var(--serif); font-size: 12px; color: var(--ink); background: var(--bone); padding: 2px 7px; border-radius: 2px; box-shadow: 0 2px 0 #8d8470; white-space: nowrap; }
+  .keys span { color: var(--bone-dim); line-height: 1.6; }
+  .keys b { color: var(--bone); font-weight: 600; }
+  .panel .row { display: flex; gap: 22px; margin-top: 22px; flex-wrap: wrap; }
+
+  /* ---------- HUD ---------- */
+  #hud { z-index: 10; opacity: 0; transition: opacity .8s; }
+  #hud.on { opacity: 1; }
+  .hud-bl { position: absolute; left: max(var(--gut), 3vw); bottom: calc(max(var(--gut), 4vh) + env(safe-area-inset-bottom, 0px)); display: grid; gap: 10px; }
+  .slots { display: flex; gap: 10px; align-items: flex-end; }
+  .slot { width: 40px; height: 40px; position: relative; display: grid; place-items: center; }
+  .slot::before { content: ""; position: absolute; inset: 5px; transform: rotate(45deg); border: 1px solid rgba(200,164,90,.7); background: rgba(12,10,8,.55); }
+  .slot b { position: relative; font-family: var(--brush); font-weight: 400; font-size: 20px; color: var(--gold-hi); }
+  .slot i { position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); font-style: normal; font-size: 10px; color: var(--bone-dim); letter-spacing: .05em; }
+  .slot .cd { position: absolute; inset: 5px; transform: rotate(45deg); background: conic-gradient(rgba(8,7,6,.82) var(--p, 0%), transparent 0); }
+  .slot.dim b { opacity: .45; }
+  .slot.gourd::before { border-color: rgba(168,38,27,.8); }
+  .slot.gourd b { color: #f0b9a0; }
+  .slot .n { position: absolute; right: -6px; top: -4px; font-size: 12px; color: var(--bone); font-weight: 600; }
+  .bars { display: grid; gap: 5px; margin-top: 12px; }
+  .bar { position: relative; height: 6px; background: rgba(10,9,7,.6); box-shadow: 0 0 0 1px rgba(232,224,204,.12); }
+  .bar > i { position: absolute; inset: 0 auto 0 0; }
+  .bar.hp { height: 7px; width: 300px; max-width: 58vw; }
+  .bar.hp .tr { background: var(--hp-trail); transition: width .6s .25s ease-out; }
+  .bar.hp .fl { background: linear-gradient(180deg, #fffaf0, var(--bone)); }
+  .bar.mp { height: 4px; width: 220px; max-width: 44vw; }
+  .bar.mp .fl { background: linear-gradient(180deg, #a9d2f0, var(--spirit)); }
+  .bar.st { height: 4px; width: 250px; max-width: 50vw; }
+  .bar.st .fl { background: linear-gradient(180deg, #f5d98f, var(--stam)); }
+  .bar.flash { animation: barflash .5s 2; }
+  @keyframes barflash { 50% { box-shadow: 0 0 0 1px #ff6b4a, 0 0 12px #ff6b4a; } }
+  .hud-br { position: absolute; right: max(var(--gut), 3vw); bottom: calc(max(var(--gut), 4vh) + env(safe-area-inset-bottom, 0px)); display: grid; justify-items: end; gap: 8px; }
+  .focus { display: flex; gap: 9px; align-items: center; }
+  .focus .pip { width: 16px; height: 16px; transform: rotate(45deg); border: 1px solid rgba(240,207,134,.6); background: rgba(12,10,8,.5); position: relative; overflow: hidden; }
+  .focus .pip i { position: absolute; left: 0; right: 0; bottom: 0; height: var(--f, 0%); background: linear-gradient(0deg, #e0a040, var(--gold-hi)); }
+  .focus .pip.full { box-shadow: 0 0 10px rgba(255,190,90,.8); }
+  .focus .pip.pulse { animation: pip .5s; }
+  @keyframes pip { 30% { transform: rotate(45deg) scale(1.5); } }
+  .focus-lbl { font-family: var(--brush); font-size: 18px; color: var(--gold-hi); letter-spacing: .2em; }
+  .will { position: absolute; right: max(var(--gut), 3vw); top: calc(max(var(--gut), 3vh) + env(safe-area-inset-top, 0px)); font-size: 13px; letter-spacing: .15em; color: var(--bone-dim); display: flex; gap: 10px; align-items: baseline; }
+  .will b { font-size: 18px; color: var(--gold-hi); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: .02em; }
+  .zone { position: absolute; left: 50%; top: 16vh; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 1.4s; }
+  .zone.on { opacity: 1; }
+  .zone .zn { font-family: var(--brush); font-size: clamp(34px, 5vw, 56px); letter-spacing: .15em; text-shadow: 0 2px 20px rgba(0,0,0,.7); }
+  .zone .zs { font-size: 13px; letter-spacing: .5em; color: var(--bone-dim); margin-top: 6px; }
+  .zone .zl { width: 220px; height: 1px; margin: 10px auto 0; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+  .boss { position: absolute; left: 50%; bottom: calc(max(64px, 12vh) + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(560px, 46vw); display: none; }
+  .boss.on { display: block; }
+  .boss .bn { font-family: var(--brush); font-size: 26px; letter-spacing: .25em; text-align: center; margin-bottom: 6px; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+  .boss .bar { height: 5px; width: 100%; }
+  .boss .bar .fl { background: linear-gradient(180deg, #f3ece0, #cfc6b2); }
+  .boss .bar .tr { background: var(--hp-trail); transition: width .8s .3s ease-out; }
+  .boss .bar::before, .boss .bar::after { content: ""; position: absolute; top: 50%; width: 9px; height: 9px; border: 1px solid var(--gold); transform: translateY(-50%) rotate(45deg); background: var(--ink); }
+  .boss .bar::before { left: -14px; } .boss .bar::after { right: -14px; }
+  .boss .pz { height: 2px; margin-top: 4px; background: rgba(0,0,0,.4); position: relative; }
+  .boss .pz i { position: absolute; inset: 0 auto 0 0; background: var(--gold); opacity: .75; }
+  .lockon { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; display: none; }
+  .lockon.on { display: block; }
+  .lockon::before { content: ""; position: absolute; inset: 3px; transform: rotate(45deg); border: 2px solid var(--gold-hi); box-shadow: 0 0 8px rgba(255,200,100,.8); }
+  .lockon::after { content: ""; position: absolute; left: 7px; top: 7px; width: 4px; height: 4px; background: var(--gold-hi); transform: rotate(45deg); }
+  .mbar { position: absolute; width: 70px; height: 3px; margin-left: -35px; background: rgba(0,0,0,.55); box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+  .mbar i { position: absolute; inset: 0 auto 0 0; background: #d8cfbc; }
+  .prompt { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); font-size: 15px; letter-spacing: .25em; display: none; align-items: center; gap: 10px; text-shadow: 0 2px 8px #000; }
+  .prompt.on { display: flex; }
+  .prompt kbd { font-family: var(--serif); font-size: 12px; color: var(--ink); background: var(--bone); padding: 2px 7px; border-radius: 2px; letter-spacing: 0; }
+  .toast { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); font-size: 16px; letter-spacing: .3em; padding: 8px 26px; background: linear-gradient(90deg, transparent, rgba(8,7,6,.75), transparent); opacity: 0; transition: opacity .4s; white-space: nowrap; }
+  .toast.on { opacity: 1; }
+  .hints { position: absolute; left: max(var(--gut), 3vw); top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--bone-dim); line-height: 2.1; transition: opacity 1.5s; }
+  .hints kbd { font-family: var(--serif); font-size: 11px; color: var(--ink); background: rgba(232,224,204,.85); padding: 1px 6px; border-radius: 2px; margin-right: 8px; }
+  .hints.off { opacity: 0; }
+  .vign { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(120,10,5,.55) 100%); opacity: 0; transition: opacity .3s; }
+
+  /* ---------- cinematic overlays ---------- */
+  .card { position: fixed; inset: 0; display: grid; place-items: center; z-index: 30; pointer-events: none; opacity: 0; transition: opacity 1.2s; }
+  .card.on { opacity: 1; }
+  .card.dark { background: radial-gradient(ellipse at center, rgba(5,4,3,.55), rgba(5,4,3,.92)); }
+  .chapter { text-align: center; display: grid; gap: 14px; justify-items: center; }
+  .chapter .c1 { font-size: 15px; letter-spacing: 1em; color: var(--bone-dim); padding-left: 1em; }
+  .chapter .c2 { font-family: var(--brush); font-size: clamp(56px, 10vw, 110px); letter-spacing: .2em; padding-left: .2em; line-height: 1.1; }
+  .chapter .c3 { width: 160px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+  .bosscard { position: fixed; left: 8vw; bottom: 22vh; z-index: 30; pointer-events: none; opacity: 0; transition: opacity .8s; }
+  .bosscard.on { opacity: 1; }
+  .bosscard .bc1 { font-size: 14px; letter-spacing: .5em; color: var(--bone-dim); }
+  .bosscard .bc2 { font-family: var(--brush); font-size: clamp(70px, 12vw, 140px); line-height: 1; letter-spacing: .1em; text-shadow: 0 6px 30px rgba(0,0,0,.8); }
+  .bosscard .bc3 { width: 280px; max-width: 70vw; height: 2px; background: linear-gradient(90deg, var(--seal), transparent); margin-top: 8px; }
+  .big { text-align: center; display: grid; gap: 16px; justify-items: center; pointer-events: none; }
+  .big .g { font-family: var(--brush); font-size: clamp(120px, 26vh, 260px); line-height: 1; color: var(--bone); text-shadow: 0 0 60px rgba(0,0,0,.8); }
+  .big.defeat .g { color: #c9392b; text-shadow: 0 0 50px rgba(120,0,0,.6); }
+  .big.win .g { color: var(--gold-hi); text-shadow: 0 0 50px rgba(255,170,60,.45); }
+  .big .l { font-size: 16px; letter-spacing: .4em; color: var(--bone); padding-left: .4em; }
+  .big .s { font-size: 13px; letter-spacing: .2em; color: var(--bone-dim); }
+  .big .stats { display: grid; grid-template-columns: max-content max-content; gap: 6px 26px; font-size: 14px; color: var(--bone-dim); margin-top: 6px; }
+  .big .stats b { color: var(--bone); font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  .big .row { display: flex; gap: 26px; margin-top: 14px; pointer-events: auto; flex-wrap: wrap; justify-content: center; }
+  .fade { position: fixed; inset: 0; background: #000; z-index: 35; pointer-events: none; opacity: 0; transition: opacity .8s; }
+  .fade.on { opacity: 1; }
+
+  /* ---------- touch ---------- */
+  #touch { z-index: 12; pointer-events: none; }
+  #touch .stick { position: absolute; width: 120px; height: 120px; border-radius: 50%; border: 1px solid rgba(232,224,204,.25); left: 40px; bottom: 60px; opacity: .35; transition: opacity .2s; }
+  #touch .stick.on { opacity: .9; }
+  #touch .knob { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px; border-radius: 50%; background: rgba(232,224,204,.35); }
+  #touch .btns { position: absolute; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 58px); grid-auto-rows: 58px; gap: 8px; pointer-events: auto; }
+  #touch .btns button, #touch .tops button { width: 58px; height: 58px; border-radius: 50%; border: 1px solid rgba(200,164,90,.55); background: rgba(12,10,8,.45); color: var(--bone); font-family: var(--brush); font-size: 22px; pointer-events: auto; }
+  #touch .btns button.on, #touch .tops button.on { background: rgba(200,164,90,.55); }
+  #touch .tops { position: absolute; right: calc(14px + env(safe-area-inset-right, 0px)); top: calc(60px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; pointer-events: auto; }
+  #touch .tops button { width: 46px; height: 46px; font-size: 18px; }
+
+  @media (max-width: 720px) {
+    #title { background: linear-gradient(180deg, rgba(8,7,6,.3) 0%, rgba(8,7,6,.88) 55%); }
+    #title .t-wrap { flex-direction: column; justify-content: flex-end; align-items: flex-start; padding-bottom: 110px; gap: 20px; }
+    #title .t-name { flex-direction: row; font-size: 64px; }
+    #title .t-seal { position: static; width: auto; margin-left: 12px; align-self: center; font-size: 15px !important; padding: 6px 4px; }
+    #title .t-lede { display: none; }
+    .hints { display: none; }
+    .bar.hp { width: 200px; }
+    .boss { width: 80vw; bottom: 190px; }
+    .hud-br { bottom: 230px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: .01s !important; animation-duration: .01s !important; }
+  }
+</style>
+
+<div id="game"></div>
+
+<div id="loading" class="layer">
+  <div class="ld">
+    <div class="ld-glyph">悟</div>
+    <div class="ld-bar"><i id="ldbar"></i></div>
+    <div class="ld-txt" id="ldtxt">山 雨 欲 来</div>
+  </div>
+</div>
+
+<div id="title" class="layer" hidden>
+  <div class="t-wrap">
+    <div class="t-name"><span>天</span><span>命</span><span>人</span><span class="t-seal">黑风山</span></div>
+    <div class="t-side">
+      <div class="t-sub">第一回 · 火照黑云</div>
+      <p class="t-lede">金箍在额，长棍在手。黑风山的狼妖盘踞古道，残塔下游荡着巨首幽魂，观音禅院里，广智的双刃已燃起烈焰。</p>
+      <nav>
+        <button class="menu-btn" id="btnStart">开始游戏</button>
+        <button class="menu-btn small" id="btnControls">操作说明</button>
+        <button class="menu-btn small" id="btnSettings">设置</button>
+      </nav>
+    </div>
+  </div>
+  <div class="t-foot">非官方同人致敬作品，灵感来自《黑神话：悟空》，与游戏科学无关。所有模型、动画、音乐与音效均为程序实时生成。</div>
+</div>
+
+<div id="controls" class="panel" hidden>
+  <div class="box">
+    <h2>操作说明</h2>
+    <div class="keys">
+      <kbd>W A S D</kbd><span><b>移动</b> · 按住 <kbd>Shift</kbd> 疾跑</span>
+      <kbd>鼠标</kbd><span><b>转动视角</b> · 滚轮调整远近</span>
+      <kbd>左键 / J</kbd><span><b>轻棍</b> · 连按打出五段连招，命中积攒棍势</span>
+      <kbd>右键 / K</kbd><span><b>重棍</b> · 按住蓄力，松开劈下，消耗全部棍势</span>
+      <kbd>空格</kbd><span><b>闪身</b> · 敌人出手瞬间闪避可触发“识破”，时间放缓并获得棍势</span>
+      <kbd>1</kbd><span><b>定身术</b> · 定住目标数秒</span>
+      <kbd>2</kbd><span><b>身外身法</b> · 拔毫毛化出三个分身助战</span>
+      <kbd>3</kbd><span><b>铜头铁臂</b> · 化身金铁，架住攻击后自动反击</span>
+      <kbd>R</kbd><span><b>饮葫芦</b> · 回复气血，在土地庙补满</span>
+      <kbd>Q / 中键</kbd><span><b>锁定</b> 目标</span>
+      <kbd>E</kbd><span><b>交互</b> · 在土地庙敬香歇息，重置妖怪</span>
+      <kbd>Esc</kbd><span><b>暂停</b></span>
+      <kbd>手柄</kbd><span>X 轻棍 · Y 重棍 · B 闪身 · A 疾跑 · RB 锁定 · 十字键 法术与葫芦</span>
+    </div>
+    <div class="row"><button class="menu-btn" id="btnCloseControls">知道了</button></div>
+  </div>
+</div>
+
+<div id="settings" class="panel" hidden>
+  <div class="box">
+    <h2>设置</h2>
+    <div style="display:grid;gap:18px">
+      <div class="opt-row">画质 <span class="seg" id="qSeg"><button data-q="low">流畅</button><button data-q="medium">均衡</button><button data-q="high">极致</button></span></div>
+      <div class="opt-row"><label for="volMaster">总音量</label><input id="volMaster" type="range" min="0" max="1" step="0.05" value="0.8"></div>
+      <div class="opt-row"><label for="volMusic">音乐</label><input id="volMusic" type="range" min="0" max="1" step="0.05" value="0.7"></div>
+      <div class="opt-row"><label for="sens">视角灵敏度</label><input id="sens" type="range" min="0.3" max="2.5" step="0.05" value="1"></div>
+      <div class="opt-row" style="font-size:12px;color:#7d7564">画质改动在重新开始后完全生效。</div>
+    </div>
+    <div class="row"><button class="menu-btn" id="btnCloseSettings">返回</button></div>
+  </div>
+</div>
+
+<div id="pause" class="panel" hidden>
+  <div class="box" style="width:min(420px,100%)">
+    <h2>暂停</h2>
+    <nav style="display:grid;gap:6px;justify-items:start">
+      <button class="menu-btn" id="btnResume">继续</button>
+      <button class="menu-btn small" id="btnPControls">操作说明</button>
+      <button class="menu-btn small" id="btnPSettings">设置</button>
+      <button class="menu-btn small" id="btnRestart">回到土地庙</button>
+    </nav>
+  </div>
+</div>
+
+<div id="hud" class="layer">
+  <div class="vign" id="vign"></div>
+  <div class="will">灵蕴 <b id="will">0</b></div>
+  <div class="zone" id="zone"><div class="zn" id="zoneName"></div><div class="zs" id="zoneSub"></div><div class="zl"></div></div>
+  <div class="hints" id="hints">
+    <div><kbd>WASD</kbd>移动　<kbd>Shift</kbd>疾跑</div>
+    <div><kbd>左键</kbd>轻棍　<kbd>右键</kbd>蓄力重棍</div>
+    <div><kbd>空格</kbd>闪身　<kbd>Q</kbd>锁定</div>
+    <div><kbd>1</kbd>定身　<kbd>2</kbd>分身　<kbd>3</kbd>铜头铁臂</div>
+    <div><kbd>R</kbd>葫芦　<kbd>E</kbd>土地庙歇息　<kbd>H</kbd>隐藏提示</div>
+  </div>
+  <div class="lockon" id="lockon"></div>
+  <div id="mbars"></div>
+  <div class="prompt" id="prompt"><kbd>E</kbd><span id="promptTxt">敬香歇息</span></div>
+  <div class="toast" id="toast"></div>
+  <div class="boss" id="boss"><div class="bn" id="bossName"></div><div class="bar"><i class="tr" id="bossTr"></i><i class="fl" id="bossFl"></i></div><div class="pz"><i id="bossPz"></i></div></div>
+  <div class="hud-bl">
+    <div class="slots">
+      <div class="slot gourd" id="slotGourd"><b>葫</b><span class="n" id="gourdN">5</span><i>R</i></div>
+      <div class="slot" id="slot1"><div class="cd"></div><b>定</b><i>1</i></div>
+      <div class="slot" id="slot2"><div class="cd"></div><b>分</b><i>2</i></div>
+      <div class="slot" id="slot3"><div class="cd"></div><b>铜</b><i>3</i></div>
+    </div>
+    <div class="bars">
+      <div class="bar hp" id="barHp"><i class="tr" id="hpTr"></i><i class="fl" id="hpFl"></i></div>
+      <div class="bar mp" id="barMp"><i class="fl" id="mpFl"></i></div>
+      <div class="bar st" id="barSt"><i class="fl" id="stFl"></i></div>
+    </div>
+  </div>
+  <div class="hud-br">
+    <div class="focus" id="focus"><div class="pip"><i></i></div><div class="pip"><i></i></div><div class="pip"><i></i></div><div class="pip"><i></i></div></div>
+    <div class="focus-lbl">棍势</div>
+  </div>
+</div>
+
+<div id="touch" class="layer" hidden>
+  <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+  <div class="tops"><button data-act="lock">锁</button><button data-act="interact">敬</button><button data-act="pause">停</button></div>
+  <div class="btns">
+    <button data-act="spell1">定</button><button data-act="spell2">分</button><button data-act="spell3">铜</button>
+    <button data-act="gourd">葫</button><button data-act="heavy">重</button><button data-act="sprint">疾</button>
+    <button data-act="dodge">闪</button><button data-act="light" style="grid-column: span 2; width:124px; border-radius:29px">棍</button>
+  </div>
+</div>
+
+<div class="card dark" id="chapterCard"><div class="chapter"><div class="c1">第 一 回</div><div class="c2">火照黑云</div><div class="c3"></div></div></div>
+<div class="bosscard" id="bossCard"><div class="bc1" id="bossEpi"></div><div class="bc2" id="bossTitle"></div><div class="bc3"></div></div>
+<div class="card dark" id="deathCard"><div class="big defeat"><div class="g">败</div><div class="l">胜败乃兵家常事</div><div class="s" id="deathHint">稍后将在土地庙重整旗鼓</div></div></div>
+<div class="card dark" id="winCard"><div class="big win"><div class="g">胜</div><div class="l" id="winLine">广智 已伏诛</div>
+  <div class="stats"><span>用时</span><b id="stTime">0:00</b><span>身陨</span><b id="stDeaths">0</b><span>灵蕴</span><b id="stWill">0</b><span>识破</span><b id="stPerfect">0</b></div>
+  <div class="s">感谢游玩 · 非官方同人致敬作品</div>
+  <div class="row"><button class="menu-btn" id="btnFree">继续探索</button><button class="menu-btn small" id="btnAgain">再战广智</button></div></div></div>
+<div class="fade" id="fade"></div>
