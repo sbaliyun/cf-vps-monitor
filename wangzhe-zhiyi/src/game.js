@@ -65,7 +65,7 @@
           const extra = a.items.concat(b.items);
           removeUnit(p, a); removeUnit(p, b);
           keep.star++;
-          for (const it of extra) { if (keep.items.length < 3) keep.items.push(it); else p.items.push(it); }
+          for (const it of extra) addItem(p, keep, it);
           ups.push(keep);
           changed = true;
           break;
@@ -82,6 +82,14 @@
       for (const u of ups) { sfx(u.star === 3 ? 'star3' : 'star2'); ui('starUp', u); }
     }
     return ups;
+  }
+  // 给单位添加装备：基础装备遇到基础装备自动合成，满 3 件则退回装备栏
+  function addItem(p, u, id) {
+    if (G.ITEMS[id].comp) {
+      const ci = u.items.findIndex(x => G.ITEMS[x].comp);
+      if (ci >= 0) { u.items[ci] = G.COMBO[u.items[ci] + '+' + id]; return; }
+    }
+    if (u.items.length < 3) u.items.push(id); else p.items.push(id);
   }
   function removeUnit(p, u) {
     let i = p.board.indexOf(u); if (i >= 0) { p.board.splice(i, 1); return; }
@@ -107,8 +115,11 @@
     if (p.human) { sfx('buy'); ui('refresh'); ui('tip', 'drag', '把英雄从备战席拖到棋盘上，他们才会出战。'); }
     return true;
   };
+  const owns = (p, u) => !!u && (p.board.indexOf(u) >= 0 || p.bench.indexOf(u) >= 0);
+  G.owns = owns;
   A.sellValue = u => { const c = G.HEROES[u.hid].cost; return c * Math.pow(3, u.star - 1) - (u.star > 1 && c > 1 ? 1 : 0); };
   A.sell = function (p, u) {
+    if (!owns(p, u)) return false;
     if (S.phase === 'combat' && p.board.indexOf(u) >= 0) return false;
     removeUnit(p, u);
     p.gold += A.sellValue(u);
@@ -143,6 +154,7 @@
 
   // 移动：dest = {type:'board',c,r} | {type:'bench',i}
   A.move = function (p, u, dest) {
+    if (!owns(p, u)) return false;
     const onBoard = p.board.indexOf(u) >= 0;
     if (S.phase === 'combat' && (onBoard || dest.type === 'board')) { if (p.human) ui('toast', '战斗中无法调整棋盘'); return false; }
     if (dest.type === 'board') {
@@ -182,7 +194,7 @@
   };
   // 装备：返回 true 成功
   A.equip = function (p, itemIdx, u) {
-    const id = p.items[itemIdx]; if (!id || !u) return false;
+    const id = p.items[itemIdx]; if (!id || !owns(p, u)) return false;
     const it = G.ITEMS[id];
     if (it.comp) {
       const ci = u.items.findIndex(x => G.ITEMS[x].comp);
@@ -403,9 +415,9 @@
     S.pendingChoice = null;
     if (R.aug) {
       S.pendingChoice = 'aug';
-      for (const p of S.players) if (!p.human && p.alive) applyAug(p, pick(augChoices(R.aug)).id);
+      for (const p of S.players) if (!p.human && p.alive) { const ch = augChoices(R.aug, p); if (ch.length) applyAug(p, pick(ch).id); }
       S.timer += 20; S.timerMax = S.timer;
-      ui('openAugments', augChoices(R.aug), R.aug);
+      ui('openAugments', augChoices(R.aug, S.me), R.aug);
     } else if (R.ev) {
       S.pendingChoice = 'ev';
       ui('openEvent', pick(G.EVENTS));
@@ -439,10 +451,10 @@
   }
 
   /* ---------- 奇遇 ---------- */
-  function augChoices(tierHint) {
+  function augChoices(tierHint, p) {
     const tier = tierHint === 1 ? (Math.random() < 0.7 ? 1 : 2) : tierHint === 2 ? (Math.random() < 0.75 ? 2 : Math.random() < 0.5 ? 1 : 3) : (Math.random() < 0.55 ? 2 : 3);
-    const me = S.me;
-    const pool = G.AUGMENTS.filter(a => a.tier === tier && me.augs.indexOf(a.id) < 0);
+    const owner = p || S.me;
+    const pool = G.AUGMENTS.filter(a => a.tier === tier && owner.augs.indexOf(a.id) < 0);
     return shuffle(pool.slice()).slice(0, 3);
   }
   G.augChoices = augChoices;
@@ -460,7 +472,7 @@
       case 'recruit3': for (let i = 0; i < 2; i++) { const c = G.HERO_LIST.filter(h => h.cost === 3 && S.pool[h.id] > 0); if (c.length) { const h = pick(c); takeFromPool(h.id, 1); giveUnit(p, h.id, 1); } } break;
       case 'recruit4': { const c = G.HERO_LIST.filter(h => h.cost === 4 && S.pool[h.id] >= 3); if (c.length) { const h = pick(c); takeFromPool(h.id, 3); giveUnit(p, h.id, 2); } break; }
       case 'starup': {
-        const c = p.board.filter(u => u.star === 1);
+        const c = p.board.filter(u => u.star === 1 && S.pool[u.hid] >= 2);
         if (c.length) { const u = pick(c); takeFromPool(u.hid, 2); u.star = 2; if (p.human) ui('starUp', u); merge(p); }
         break;
       }
@@ -472,7 +484,7 @@
     sfx('augment');
     ui('refresh');
   };
-  G.rerollAugs = function (tier) { return augChoices(tier); };
+  G.rerollAugs = function (tier) { return augChoices(tier, S.me); };
 
   /* ---------- 奇遇事件 ---------- */
   G.resolveEvent = function (ev, opt) {
@@ -563,7 +575,7 @@
     p.board = autoPosition(onBoard);
     p.bench = new Array(G.BENCH).fill(null);
     rest.slice(0, G.BENCH).forEach((u, i) => { delete u.c; delete u.r; p.bench[i] = u; });
-    for (const u of rest.slice(G.BENCH)) { p.gold += A.sellValue(u); returnUnitToPool(u); }
+    for (const u of rest.slice(G.BENCH)) { p.gold += A.sellValue(u); returnUnitToPool(u); for (const it of u.items) p.items.push(it); }
     // 装备
     const carries = p.board.slice().sort((a, b) => unitValue(b, p) - unitValue(a, p));
     let guard = 0;

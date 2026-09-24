@@ -138,7 +138,8 @@
     else if (k === 'f') G.act.buyXP(me);
     else if (k === ' ') { e.preventDefault(); if (S.phase === 'planning') G.startCombat(); }
     else if (k === 'e' || k === 'w') {
-      const h = G.render.hoverUnit; if (!h || h.where === 'battle') return;
+      if (G.render.drag) return;
+      const h = G.render.hoverUnit; if (!h || h.where === 'battle' || !G.owns(me, h.u)) return;
       if (k === 'e') { G.act.sell(me, h.u); G.render.hoverUnit = null; U.hideUnit(); }
       else if (h.where === 'bench') {
         if (S.phase === 'combat') return;
@@ -153,6 +154,8 @@
   U.refresh = function () {
     if (!S.me || S.phase === 'menu') return;
     renderTop(); renderShopBar(); renderShop(); renderTraits(); renderPlayers(); renderItems(); renderAugs();
+    const pr = U.panelRef;
+    if (pr && !el.unitPanel.hidden && !pr.battle && !pr.fromShop && !G.owns(S.me, pr.u)) U.hideUnit();
   };
   function renderTop() {
     const R = S.round; if (!R) return;
@@ -265,7 +268,7 @@
     }
     dmgT += dt; liveT += dt;
     if ((S.phase === 'combat') && dmgT > 0.35) { dmgT = 0; renderDmg(); }
-    if (liveT > 0.25 && !el.unitPanel.hidden && U.panelUnit && U.panelUnit.maxHp) { liveT = 0; U.showUnit(U.panelUnit, true); }
+    if (liveT > 0.25 && !el.unitPanel.hidden && U.panelUnit && U.panelUnit.maxHp) { liveT = 0; if (S.battle) U.showUnit(U.panelUnit, true); else U.hideUnit(); }
   };
 
   /* ---------- 提示 ---------- */
@@ -348,6 +351,7 @@
   U.showUnit = function (u, battle, fromShop) {
     const h = G.HEROES[u.hid], m = G.MONSTERS[u.hid];
     U.panelUnit = battle ? u : null;
+    U.panelRef = { u, battle: !!battle, fromShop: !!fromShop };
     let html = '<button class="up-close" aria-label="关闭">×</button>';
     if (h) {
       const sm = [1, 1.8, 3.24][u.star - 1];
@@ -383,6 +387,7 @@
     el.unitPanel.querySelector('.up-close').onclick = () => U.hideUnit();
     el.unitPanel.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
       const me = S.me;
+      if (!G.owns(me, u)) { U.hideUnit(); return; }
       if (b.dataset.a === 'sell') { G.act.sell(me, u); U.hideUnit(); }
       else {
         if (me.board.indexOf(u) >= 0) { const i = me.bench.indexOf(null); if (i >= 0) G.act.move(me, u, { type: 'bench', i }); else U.toast('备战席已满'); }
@@ -391,7 +396,7 @@
       }
     });
   };
-  U.hideUnit = function () { el.unitPanel.hidden = true; U.panelUnit = null; G.render.selected = null; };
+  U.hideUnit = function () { el.unitPanel.hidden = true; U.panelUnit = null; U.panelRef = null; G.render.selected = null; };
 
   /* ---------- 出售区 / 拖拽装备 ---------- */
   U.showSell = function (u) { if (S.phase === 'combat' && S.me.board.indexOf(u) >= 0) return; el.sellVal.textContent = '+' + G.act.sellValue(u); el.sellZone.hidden = false; };
@@ -490,6 +495,7 @@
   /* ---------- 游戏事件 ---------- */
   U.roundStart = function (R) {
     hideTip();
+    if (U.panelUnit) U.hideUnit();
     if (S.mode === 'pve') {
       const boss = { tyrant: '暴君', overlord: '主宰', storm: '风暴龙王' }[R.pve];
       U.banner(R.label, boss ? '首领来袭 · ' + boss : R.pve === 'shadow' ? '暗影军团来袭' : '暗影小兵', boss ? 'blue' : '');

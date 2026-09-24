@@ -234,7 +234,7 @@
       a *= src.dmgAmp;
       if (src.hunterExec && tgt.hp < tgt.maxHp * 0.5) a *= 1 + src.hunterExec;
       if (src.hid === 'houyi') a *= 1 + src.stacks * 0.03;
-      if (f.skill && src.it.tongku && !f.echo) a += tgt.hp * 0.06;
+      if (f.skill && src.it.tongku && !f.echo && src.tongkuHit && !src.tongkuHit.has(tgt.id)) { src.tongkuHit.add(tgt.id); a += tgt.hp * 0.06; }
     }
     if (this.t > 30) a *= 1 + (this.t - 30) * 0.3;
     if (type === 'phys') { const ar = Math.max(0, tgt.armor * (tgt.shredT > 0 ? 0.7 : 1)); a *= 100 / (100 + ar); }
@@ -399,6 +399,7 @@
     this.addFx('skillname', { x: u.x, y: u.y - 1.7, s: name, color: u.team === 0 ? '#FFE9A8' : '#FFB8A8', dur: 1.1 });
     this.addFx('castglow', { u, color: u.hero ? G.TRAITS[u.hero.traits[0]].color : '#FFD65A', dur: 0.5 });
     u.echoReady = !!u.it.huixiang;
+    u.tongkuHit = u.it.tongku ? new Set() : null;
     u.castT = sk.ct || 0.2;
     u.pending = () => {
       sk.fn(this, u, u.hero ? this.vals(u) : null);
