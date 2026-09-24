@@ -1,0 +1,69 @@
+<div id="app">
+  <div id="stage" class="L">
+    <canvas id="cv" aria-label="王者之弈棋盘"></canvas>
+
+    <header id="topbar" class="hud">
+      <div class="tb-round"><b id="roundLabel">1-1</b><span id="phaseLabel">准备阶段</span></div>
+      <div id="track" aria-hidden="true"></div>
+      <div class="tb-timer"><span id="timerNum">30</span><div class="tbar"><i id="timerBar"></i></div></div>
+      <div class="tb-btns">
+        <button id="btnReady" class="btn-ready" title="立即开战（空格）">开战</button>
+        <button id="btnSpeed" class="icon-btn" title="战斗速度">1×</button>
+        <button id="btnMusic" class="icon-btn" title="背景音乐">乐</button>
+        <button id="btnSfx" class="icon-btn" title="音效">音</button>
+        <button id="btnMenu" class="icon-btn" title="菜单">≡</button>
+      </div>
+    </header>
+
+    <aside id="traits" class="hud panel"></aside>
+    <aside id="players" class="hud panel"></aside>
+    <div id="itemTray" class="hud panel"><div class="ph">装备</div><div id="items"></div></div>
+    <div id="augBar" class="hud"></div>
+
+    <footer id="shopbar" class="hud">
+      <div class="sb-left">
+        <div class="lvl-row"><span id="lvl">Lv.1</span><span id="pop">1/1</span></div>
+        <div id="xpBar"><i></i><span>0/2</span></div>
+        <div class="act-row">
+          <button id="btnXP" class="act"><b>购买经验</b><span><i class="coin"></i>4</span><kbd>F</kbd></button>
+          <button id="btnRoll" class="act"><b>刷新</b><span><i class="coin"></i><em id="rollCost">2</em></span><kbd>D</kbd></button>
+        </div>
+      </div>
+      <div id="shop"></div>
+      <div class="sb-right">
+        <div id="gold"><i class="coin big"></i><span id="goldNum">0</span></div>
+        <div id="streak"></div>
+        <button id="btnLock" class="icon-btn" title="锁定商店">锁</button>
+        <div id="odds"></div>
+      </div>
+      <div id="sellZone" hidden><span>出售</span><b id="sellVal">+1</b></div>
+    </footer>
+
+    <div id="unitPanel" class="panel" hidden></div>
+    <div id="tooltip" hidden></div>
+    <div id="toast" aria-live="polite"></div>
+    <div id="banner" hidden></div>
+    <div id="tip" hidden><p id="tipText"></p><button id="tipOk">知道了</button></div>
+    <div id="modal" hidden></div>
+
+    <section id="menu">
+      <div class="menu-inner">
+        <div class="logo">
+          <span class="logo-sub">王者荣耀 · 自走棋</span>
+          <h1>王者之弈</h1>
+          <span class="logo-tag">召集英雄 · 排兵布阵 · 守护峡谷荣光</span>
+        </div>
+        <div id="parade"></div>
+        <div class="menu-btns">
+          <button class="mbtn gold" data-go="pvp"><b>巅峰对战</b><span>八人对局 · 冲击排名</span></button>
+          <button class="mbtn blue" data-go="pve"><b>风暴龙王</b><span>十二关挑战 · 击败首领</span></button>
+          <button class="mbtn" data-go="gallery"><b>英雄图鉴</b><span>34 位英雄 · 11 种羁绊</span></button>
+          <button class="mbtn" data-go="help"><b>玩法说明</b><span>新手必读</span></button>
+          <div class="diff" role="radiogroup" aria-label="难度"><span>难度</span><div id="diffSeg"></div></div>
+        </div>
+        <div id="record"></div>
+      </div>
+    </section>
+  </div>
+  <img id="itemGhost" alt="" hidden>
+</div>
