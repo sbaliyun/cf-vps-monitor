@@ -11,16 +11,14 @@ agent/dist/
 release/
 *.tsbuildinfo
 
-# Cloudflare local state and secrets
-.wrangler/
-worker/.wrangler/
-.dev.vars*
-!.dev.vars.example
+# ESA local state and secrets
+# .dev/：esa-cli 打包产物（pub.js）与本地开发服务器的 KV 持久化文件
+.dev/
+.esa/
 .env
 .env.*
 !.env.example
 !.env.*.example
-supabase/.temp/
 
 # Test and preview artifacts
 AI_RELEASE_STATE.md
@@ -35,6 +33,8 @@ design-previews/
 .superpowers/
 .worktrees/
 cf-monitor-encrypted-backup-*.json
+esa-vps-monitor-encrypted-backup-*.json
+esa-vps-monitor-before-restore-*.json
 
 # Logs
 *.log

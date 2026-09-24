@@ -121,7 +121,7 @@ export default function SettingsSite() {
     if (!password) return;
 
     try {
-      await downloadBackupFile(`cf-monitor-encrypted-backup-${new Date().toISOString().slice(0, 10)}.json`, password);
+      await downloadBackupFile(`esa-vps-monitor-encrypted-backup-${new Date().toISOString().slice(0, 10)}.json`, password);
       toast.success('加密完整备份已下载，请保存好备份密码');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '备份下载失败');
@@ -147,7 +147,7 @@ export default function SettingsSite() {
       );
       if (!beforeRestorePassword) return;
       try {
-        await downloadBackupFile(`cf-monitor-before-restore-${new Date().toISOString().slice(0, 10)}.json`, beforeRestorePassword);
+        await downloadBackupFile(`esa-vps-monitor-before-restore-${new Date().toISOString().slice(0, 10)}.json`, beforeRestorePassword);
       } catch (error) {
         const message = error instanceof Error ? error.message : '无法下载当前配置';
         if (!window.confirm(`恢复前自动备份失败：${message}\n\n继续恢复会覆盖当前配置，且无法用本次自动备份撤回。是否继续恢复？`)) return;
@@ -276,14 +276,14 @@ export default function SettingsSite() {
           description="显示在导航栏和浏览器标签页"
           value={settings.site_title || ''}
           onChange={(value) => updateSetting('site_title', value)}
-          placeholder="CF VPS Monitor"
+          placeholder="ESA VPS Monitor"
         />
         <SettingInput
           label="站点副标题"
           description="显示在首页标题区"
           value={settings.site_subtitle || ''}
           onChange={(value) => updateSetting('site_subtitle', value)}
-          placeholder="Cloudflare server monitor"
+          placeholder="ESA server monitor"
         />
         <SettingInput
           label="站点描述"

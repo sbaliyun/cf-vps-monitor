@@ -205,7 +205,7 @@ export default function AdminLayout() {
         <Flex className="admin-sidebar-header" align="center" justify="between">
           <Flex direction="column" gap="1" style={{ minWidth: 0 }}>
             <Text size="4" weight="bold" style={{ color: "var(--accent-11)", lineHeight: 1.15 }}>
-              CF VPS Monitor
+              ESA VPS Monitor
             </Text>
             <Text size="1" color="gray">管理后台</Text>
           </Flex>

@@ -1,136 +1,119 @@
-![Stars](https://img.shields.io/github/stars/kadidalax/cf-vps-monitor?style=for-the-badge&logo=github&label=Stars&color=ffb000) ![Forks](https://img.shields.io/github/forks/kadidalax/cf-vps-monitor?style=for-the-badge&logo=github&label=Forks&color=2ea44f) ![License](https://img.shields.io/github/license/kadidalax/cf-vps-monitor?style=for-the-badge&color=blue)
-# CF VPS Monitor
+# ESA VPS Monitor
 
-CF VPS Monitor 是一个轻量 VPS 探针面板，使用 Cloudflare Workers 承载前端、API、实时连接和定时任务，使用 Durable Objects 协调实时状态，使用 Supabase Postgres 保存配置和历史数据，使用 Go Agent 在服务器上采集指标。
+ESA VPS Monitor 是一个运行在 **阿里云 ESA 函数和 Pages** 上的轻量 VPS 探针面板：
 
+- **ESA 函数和 Pages**：托管前端静态资源和 API。
+- **ESA 边缘存储（EdgeKV）**：保存配置、实时状态和历史数据，不需要外部数据库。
+- **Go Agent**：在服务器上采集指标，通过 HTTP 上报给函数。
+
+本项目移植自 [kadidalax/cf-vps-monitor](https://github.com/kadidalax/cf-vps-monitor)（Cloudflare Workers + Durable Objects + Supabase 版）。前端、Agent 和大部分业务规则沿用原项目；存储层、实时与定时调度针对 ESA 重写。
 
 ## 特性
 
 - **服务器监控**：在线状态、CPU、GPU、内存、Swap、磁盘、负载、温度、网络速率、月度流量、账单、到期时间、系统信息、IPv4/IPv6、进程数、TCP/UDP 连接数。
-- **实时看板**：首页、节点详情页和后台首页通过 WebSocket 获取实时数据。
-- **Ping 监控**：支持 ICMP、TCP、HTTP Ping 任务，可分配到全部节点或指定节点，并展示延迟历史。
-- **网站监控**：支持 HTTP/HTTPS GET、HTTP/HTTPS HEAD 和 TCP 检测，支持期望状态码、超时、间隔、启停、隐藏、排序、手动检测和 Agent 节点侧探测。
-- **后台管理**：节点增删改、批量隐藏/删除、拖拽排序、记录清理、Agent Token 轮换、安装命令生成、系统设置、审计日志、健康检查、容量估算、备份恢复、账号改名和改密。
-- **通知**：支持 Telegram 、 SMTP Email 和 Webhook，可配置离线、到期、负载以及网站监控相关通知。
+- **实时看板**：有人查看页面时，Agent 自动切到快速上报（默认 5 秒）；无人查看时按 120 秒批量上报。
+- **Ping 监控**：支持 ICMP、TCP、HTTP Ping 任务，由 Agent 执行并展示延迟历史。
+- **网站监控**：支持 HTTP/HTTPS GET/HEAD，可由 ESA 边缘或指定 Agent 节点探测；TCP 检测必须交给 Agent（见下文“限制”）。
+- **后台管理**：节点增删改、批量隐藏/删除、拖拽排序、Agent Token 轮换、安装命令生成、审计日志、用量估算、加密备份恢复、MFA 两步验证。
+- **通知**：Telegram 和 Webhook（飞书、钉钉、企业微信、Slack、Discord 或自定义模板），可用于离线、到期、负载和网站监控告警。
 - **主题**：内置 `monitor` 和 `aurora` 主题，支持主题包、自定义 CSS、图片和字体资源。
-- **管理员恢复**：首次登录时创建管理员；忘记账号或密码时，可在登录页用当前部署的 Supabase Secret key 重置唯一管理员。
-- **省配额策略**：有实时观看者时 Agent 约 3 秒采集并上报；无人查看时约 120 秒采样并批量上报。可用节点数取决于 Ping 任务、访问量、上报方式以及数据库和实时服务的独立额度，请在后台容量估算中核对，不能仅凭 Worker 请求量保证免费运行 50 台。
-
-节点温度目前仅支持 Linux 上可识别的 CPU/SoC 传感器，多个有效读数取最高值。没有传感器或读取失败，以及当前 Windows、macOS、FreeBSD 安装包，均显示“不可用”；真实 0°C 和负温度仍是有效读数。GPU 温度独立显示。旧 Agent 需要升级才能使用这一规则，旧历史中的 0 不会被猜测改写。
-
-## 预览图
-
-<img width="960" height="540" alt="cf-vps-monitor-promo-full-mobile" src="https://github.com/user-attachments/assets/78a5c78b-143c-4874-aa6e-4dbe17c3597d" />
-
-
 
 ## 架构
 
 | 目录 | 说明 |
 | --- | --- |
-| `frontend/` | React + Vite + Radix UI + Tailwind，构建产物由 Workers Static Assets 托管 |
-| `worker/` | Hono Worker、Durable Objects、Cron Triggers、Supabase HTTP RPC 数据层 |
-| `agent/` | Go Agent，支持 WebSocket/HTTP 上报和 Unix/Windows 安装脚本 |
-| `supabase/migrations/` | Supabase 表、索引、RLS、RPC、授权和默认数据 |
-| `scripts/` | 部署和迁移清单生成脚本 |
+| `frontend/` | React + Vite + Radix UI，构建产物 `frontend/dist` 作为 ESA Pages 静态资源 |
+| `worker/` | Hono API。`src/esa-entry.ts` 是 ESA 函数入口，`src/store/` 是 EdgeKV 数据层，构建产物为 `worker/dist/esa-entry.js` |
+| `agent/` | Go Agent 与 Unix/Windows 安装脚本 |
+| `scripts/` | 函数打包（`build-esa.mjs`）、本地开发服务器（`dev-server.mjs`）、安全检查 |
+| `esa.jsonc` | ESA 函数和 Pages 项目配置：入口、静态资源目录、构建命令 |
 
-## 运行时配置
+### 与 Cloudflare 版的差异
 
+| Cloudflare 版 | ESA 版 |
+| --- | --- |
+| Supabase Postgres | EdgeKV：数据存为少量 JSON 文档（配置、实时分片、每节点历史、网站监控、审计日志等） |
+| Durable Objects + WebSocket 实时推送 | 页面轮询 `/api/live/clients`；Agent 通过 `/api/clients/policy` 得知是否有人在看，并切换上报间隔 |
+| Cron Triggers | 维护任务（离线/到期告警、网站检测、清理）在 Agent 拉取策略和访客访问时顺带触发；也可以另外配置外部定时器（见下文） |
+| Agent WebSocket 上报 | Agent 默认 `--mode http` |
+| SMTP 邮件 | 不支持（ESA 函数不能建立 TCP 连接），可以用 Webhook 转发到邮件服务 |
 
-| 名称                    | 类型       | 说明                                                                    |
-| --------------------- | -------- | --------------------------------------------------------------------- |
-| `SUPABASE_URL`        | Variable | Supabase Project URL，例如 `https://xxxx.supabase.co`                    |
-| `SUPABASE_SECRET_KEY` | Secret   | Supabase Secret key，通常以 `sb_secret_` 开头；不要填写 Publishable key、anon key |
-| `JWT_SECRET`          | Secret   | 后台会话签名密钥，必须至少 32 字节；英文/数字不少于 32 个字符                                   |
+## 部署
 
-`SUPABASE_SERVICE_ROLE_KEY` 仅作为旧部署兼容变量保留；新部署请使用 `SUPABASE_SECRET_KEY`。
+### 1. 创建 EdgeKV 命名空间
 
-## 面板部署
+在 ESA 控制台打开 **边缘计算 → 函数和 Pages → KV 存储**，创建一个命名空间，例如 `esa-vps-monitor`。名称需要与下面的 `KV_NAMESPACE` 变量一致。
 
-在 Cloudflare 的 **Settings → Build → Build Variables and Secrets** 中设置 `NODE_VERSION=24`、`GO_VERSION=1.26.8`（与 `agent/go.mod` 保持一致）。Workers Builds 官方镜像已包含 Go，也能按 `go.mod` 自动选择工具链。部署入口会先运行前后端检查、构建和 JavaScript/Go 测试；检查失败时不会发布。
+### 2. 准备 Agent 发布
 
-### Fork 原仓库部署【推荐，方便更新】
+安装脚本会从**你自己仓库**的 GitHub Releases 下载 Agent 二进制：
 
+1. Fork 本仓库（或推送到你自己的 GitHub 仓库）。
+2. 如果你的仓库不是 `sbaliyun/esa-vps-monitor`，把以下位置改成你的 `owner/repo`：
+   - `frontend/src/utils/projectLinks.ts`
+   - `agent/install.sh`、`agent/install-linux.sh`、`agent/install-windows.ps1` 中的 `CF_MONITOR_REPOSITORY`
+   - `worker/src/app.ts` 中 `/agent/install*.sh|ps1` 的跳转地址
+3. 在 GitHub 打开 **Actions → Agent Release → Run workflow**，填入版本号（例如 `v2.1.0`）并运行，生成 Agent 二进制。
 
-1. 在 [Supabase](https://supabase.com/dashboard/) 创建或选择项目。
-2. 打开 Supabase 项目 **Project Overview** 页面复制 `Project URL`；打开 **Project Settings -> API Keys -> Publishable and secret API keys**，复制 **Secret keys** 中的 `default` Secret key，格式通常为 `sb_secret_...`。
-3. Fork [本仓库](https://github.com/kadidalax/cf-vps-monitor)， 创建自己的仓库。到Actions 选择**Agent Release** 点击**Run workflow** 填入创建自己的版本号，再次点击**Run workflow** 创建自己仓库的Agent 安装脚本。
-4. 打开 Cloudflare Dashboard 的 **Workers & Pages**，点击 **创建应用程序**， 点击**Continue with GitHub**。
-5. 选择 GitHub 账号和刚创建的 Fork 仓库，点击**下一步**。
-6. 展开 **高级设置** 配置三个变量 `SUPABASE_URL`、`SUPABASE_SECRET_KEY`、`JWT_SECRET`。`JWT_SECRET` 必须至少 32 字节，英文/数字不少于 32 个字符。
-7. 保持默认 **构建命令** `npm run build`，将 **部署命令** 设置为 `npm run deploy`。
-8. 点击 **部署**。
-9. 如果 Cloudflare 里创建的 Worker 名称不是 `cf-vps-monitor`，需要同步修改 Fork 仓库的 `wrangler.toml` 里的 `name`，两者必须一致。
-10. 去 [Supabase](https://supabase.com/dashboard/account/tokens) 创建有效期 1 小时的 Access Token。
-11. 打开 `https://你的 Worker 域名/db-init` 初始化数据库，首次部署后访问 `/admin/login` 创建管理员。
+### 3. 创建函数并部署
 
+**方式 A：控制台导入 GitHub 仓库（推荐）**
 
+1. 在 ESA 控制台打开 **函数和 Pages → 创建 → 导入 GitHub 仓库**，选择你的仓库。
+2. 仓库根目录的 `esa.jsonc` 优先于控制台里的构建配置：
+   - 安装命令 `npm ci`
+   - 构建命令 `npm run build`
+   - 函数入口 `./worker/dist/esa-entry.js`
+   - 静态资源目录 `./frontend/dist`（SPA 回退）
+3. 按下表配置环境变量，然后触发部署。
 
-### 直接一键部署
+**方式 B：esa-cli**
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/kadidalax/cf-vps-monitor)
-
-1. 在 [Supabase](https://supabase.com/dashboard/) 创建或选择项目。
-2. 打开 Supabase 项目 **Project Overview** 页面复制 `Project URL`；打开 **Project Settings -> API Keys -> Publishable and secret API keys**，复制 **Secret keys** 中的 `default` Secret key，格式通常为 `sb_secret_...`。
-3. 点击 上面的**Deploy to Cloudflare**。
-4. 登录 Cloudflare, 选择账号、仓库名和 Worker 名称。
-5. 填入对应变量的值 `SUPABASE_URL`、`SUPABASE_SECRET_KEY`、`JWT_SECRET`。`JWT_SECRET` 必须至少 32 字节，英文/数字不少于 32 个字符。
-6. 保持默认 **构建命令** `npm run build`，将 **部署命令** 设置为 `npm run deploy`。
-7. 点击 **部署**。
-8. 去 [Supabase](https://supabase.com/dashboard/account/tokens) 创建有效期 1 小时的 Access Token。
-9. 打开 `https://你的 Worker 域名/db-init` 初始化数据库，首次部署后访问 `/admin/login` 创建管理员。
-10. 建议后续每次版本更新后都执行一次初始化数据库(不会丢失数据)。
-
-
-## 命令行部署
-
-适合本地开发或维护者。需要 Node.js 24 和 Go；Go 会依据 `agent/go.mod` 自动选择所需工具链。
-
-```powershell
+```bash
 npm ci
-npm run build
-npx wrangler login
-$env:SUPABASE_URL="https://xxxx.supabase.co"
-npx wrangler secret put SUPABASE_SECRET_KEY
-npx wrangler secret put JWT_SECRET
-npm run deploy
+npx esa-cli login                 # 或者设置 ESA_ACCESS_KEY_ID / ESA_ACCESS_KEY_SECRET 环境变量
+npx esa-cli env set KV_NAMESPACE=esa-vps-monitor -e production
+npx esa-cli secret put JWT_SECRET -e production
+npm run deploy                    # 等于 npm run build && esa-cli deploy
 ```
 
+**方式 C：GitHub Actions**
 
+1. 在仓库 Secrets 中添加 `ESA_ACCESS_KEY_ID` 和 `ESA_ACCESS_KEY_SECRET`，使用具有 ESA 函数和 Pages 权限的 RAM 用户 AccessKey。
+2. 手动运行 **Actions → Deploy to ESA**。
+
+> ESA 每次部署都会绑定当时的变量快照。修改变量后，需要重新部署（或提交新版本）才会生效。
+
+### 4. 环境变量
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `JWT_SECRET` | 是 | 后台会话签名密钥，至少 32 字节。请设为 Secret。 |
+| `KV_NAMESPACE` | 建议 | EdgeKV 命名空间名称，默认 `esa-vps-monitor`。 |
+| `ADMIN_RECOVERY_KEY` | 否 | 在登录页重置管理员账号时使用的恢复密钥；未设置时使用 `JWT_SECRET`。 |
+| `CRON_SECRET` | 否 | 外部定时触发地址的密钥；未设置时由 `JWT_SECRET` 派生。 |
+| `LIVE_SHARDS` | 否 | 实时状态分片数（1–4，默认 1）。节点很多且同时高频上报时调大可以减少写入冲突，代价是读取实时数据时 KV 读取次数增加。 |
+| `KV_OPS_PER_REQUEST` | 否 | 单次请求的 KV 操作预算（默认 8），请按你的 ESA 套餐限制调整。 |
+| `SUBREQUESTS_PER_REQUEST` | 否 | 单次请求的出站请求预算（默认 4，用于网站检测和通知）。 |
+
+### 5. 初始化
+
+1. 打开 `https://你的域名/db-init`，自检部署状态：KV 命名空间是否可用、`JWT_SECRET` 是否有效。
+2. 打开 `/login`。首次登录时创建唯一的管理员账号。
 
 ## 使用流程
 
-1. 登录后台。
-2. 在“服务器”添加节点。
-3. 打开节点安装命令，选择 Unix 自动检测或 Windows。复制安装命令。请确认你的安装脚本指向的仓库有效且你已经在actions里运行了创建agent脚本的workflow。
-4. 在 VPS 上执行安装命令，等待 Agent 上线。
-5. 需要 Ping 监控时，在“Ping”创建任务。
-6. 需要网站监控时，在“网站”创建 HTTP/HTTPS 或 TCP 检测目标。
-7. 需要告警时，在“通知”配置 Telegram、SMTP Email 或 webhook推送。
+1. 登录后台，在“服务器”中添加节点。
+2. 打开节点的安装命令（Unix 自动检测或 Windows），复制后在 VPS 上执行。生成的命令已经带上 `--mode http`。
+3. 需要 Ping 监控时，在“Ping”中创建任务；需要网站监控时，在“网站”中创建目标。
+4. 需要告警时，在“通知”中配置 Telegram 或 Webhook。
 
-
-同一台服务器可以安装多个 Agent 实例。每个安装命令会带独立 `instance-id`，默认生成独立服务名和安装目录。
-
-Unix 安装命令会自动判断 Linux、Alpine/OpenRC、macOS、FreeBSD，以及 root/非 root 环境。Linux 只有在 systemd 或 OpenRC 实际运行时才使用对应系统服务；没有可用服务管理器的容器会自动使用用户模式。也可加 `--install-mode user` 明确选择用户模式。
-
-| 系统 | 预编译架构 | 系统安装 | 普通用户安装 |
-| --- | --- | --- | --- |
-| Debian/Ubuntu、RHEL 系等 Linux | amd64、arm64 | 活动 systemd | 支持 |
-| Alpine/Gentoo 等 OpenRC Linux | amd64、arm64 | 活动 OpenRC | 支持 |
-| macOS | Intel、Apple Silicon | LaunchDaemon | 支持 |
-| FreeBSD | amd64 | 使用用户模式 | 支持 |
-| Windows | x64 | 需要管理员，服务任务以 LocalService 运行 | 当前不支持非管理员安装 |
-
-该表说明安装路径和发行包范围，不代表每个发行版、架构都经过实机验证。其他架构需要自行提供适配二进制或编译环境；未运行 systemd/OpenRC 的 Linux 不提供原生 SysV/runit 服务接入。
-
-非 root 或 Serv00 这类共享主机会把程序、配置和日志保存在用户目录，用 `nohup` 启动后台进程。主机允许时会添加 `crontab @reboot`；缺少 crontab 或账号无权读写时，Agent 继续运行并明确提示未配置开机自启，不覆盖原有任务。`nohup` 不提供崩溃重启，开机自启还取决于主机是否启用 cron、是否允许常驻进程。
-
-OpenRC 每次启动会准备服务账户专用日志并检查启动后进程存活，日志保留已有内容。系统服务的自定义安装路径必须允许服务账户进入；安装器不会放宽既有私有父目录权限。ICMP 与部分硬件指标取决于系统权限，不应把这些限制误当成 TCP/HTTP 或普通指标上报失败。
+同一台服务器可以安装多个 Agent 实例，每个安装命令都带独立的 `instance-id`。
 
 卸载单个 Unix 实例：
 
 ```bash
-wget -qO- 'https://raw.githubusercontent.com/kadidalax/cf-vps-monitor/refs/heads/main/agent/install.sh' | sh -s -- --uninstall -i 实例ID
+wget -qO- 'https://raw.githubusercontent.com/sbaliyun/esa-vps-monitor/refs/heads/main/agent/install.sh' | sh -s -- --uninstall -i 实例ID
 ```
 
 卸载单个 Windows 实例：
@@ -139,86 +122,68 @@ wget -qO- 'https://raw.githubusercontent.com/kadidalax/cf-vps-monitor/refs/heads
 .\install-windows.ps1 -Uninstall -i '实例ID'
 ```
 
-只有执行 `--uninstall-all --yes` 或 `-UninstallAll -Yes` 才会清理本机全部 Agent 实例。
+### 外部定时触发（可选）
 
-## 后台一键同步更新
+ESA 函数没有定时触发器。维护任务（离线/到期告警、网站检测、清理）在 Agent 拉取策略和访客访问时顺带执行，最多每分钟执行一次。**如果所有节点都离线、又没有人访问站点，维护任务就会停止。** 如果需要在这种情况下仍能收到离线告警：
 
-后台固定检测 [kadidalax/cf-vps-monitor](https://github.com/kadidalax/cf-vps-monitor) `main` 分支的最新推送编码。进入后台 `关于 -> 版本更新`，保存“你的部署仓库地址”，以后检测到推送编码不一致时会显示同步入口。
+- 后台 **设置 → 通用设置** 会显示完整的触发地址：`https://你的域名/api/cron?key=...`。
+- 用任意外部定时服务（GitHub Actions、cron-job.org、另一台服务器上的 crontab 等）每 1–5 分钟请求一次该地址。
+- 同一页面也可以点击“立即执行维护”。
 
-### 从 v2.0.2 升级到 v2.0.3
+## 从 cf-vps-monitor 迁移
 
-1. 部署完成后，立即打开本站 `/db-init` 执行一次数据库升级。已有账号、节点及有效监控数据保留，无需清库或重建节点；网站图表会从升级后的新采样重新积累。
-2. 原先使用非每月 1 日重置流量的节点，先在后台确认“流量重置日”，再更新 Agent。使用后台为原节点生成的新版安装命令原地更新即可，安装器会重启 Agent，无需重启 VPS。Agent 不会自动更新；由 Agent 执行的网站探测需要新版，旧版仍可上报普通指标和 Ping。
-3. 首次升级 Agent 会重建流量统计基线，累计值可能降低或重新起算；修改流量重置日也会重建当期累计。
+1. 在旧部署后台 **设置 → 站点设置** 下载加密备份。
+2. 在新部署创建管理员后，在 **设置 → 站点设置** 上传该备份。
+3. 备份会恢复：
+   - 站点设置
+   - 节点（含 Agent Token）
+   - Ping 任务
+   - 通知规则
+   - 网站监控
 
-### 如果是 Fork 原仓库部署【推荐】
+   历史数据、审计日志和主题不会迁移。
+4. 对每个节点，从新后台复制安装命令，原地重装 Agent：上报地址和上报方式变了，但 Token 仍然有效。
 
-适合先 Fork 官方仓库，再在 Cloudflare Workers Builds 里连接这个 Fork 仓库的部署方式。
+## 限制与用量
 
-1. 在后台 `关于 -> 版本更新`：
-   - `你的部署仓库地址` 填你的 Fork 仓库地址，例如 `https://github.com/用户名/cf-vps-monitor`
-   - 点击 `保存设置`
-2. 后台检测到更新后，点击 `前往同步 Fork`，打开你的 Fork 仓库首页。
-3. 在 GitHub 仓库文件列表上方点击 `Sync fork` 下拉菜单。
-4. 确认上游提交后点击 `Update branch`。
-5. 如果 GitHub 提示冲突，需要按提示创建 PR 或手动解决冲突。
-6. Fork 更新产生的 push 会触发 Cloudflare Workers Builds 自动构建部署。
-7. **更新后最好初始化一下数据库，否则可能无法使用**
-
-### 如果是 Deploy Button 一键部署
-
-Cloudflare 一键部署自动创建的仓库不保证包含可用的更新工作流，后台不再提供这类更新入口。需要后续稳定同步更新时，建议改用上面的 Fork 原仓库部署方式。
-
+- **EdgeKV 是最终一致的**：在一个边缘节点写入的数据，可能要几秒到几十秒后才能在其他节点读到。短时间内反复修改配置时，偶尔可能出现互相覆盖。
+- **单次请求的 KV 和出站请求预算**：代码按 `KV_OPS_PER_REQUEST` 和 `SUBREQUESTS_PER_REQUEST` 控制用量。边缘侧的网站检测和通知会分摊到多次维护中执行。
+- **历史数据**：
+  - 最多保留 72 小时。
+  - 最近 4 小时按记录间隔保存，更早的数据聚合成 10 分钟一个点。
+  - 每个节点的历史是一个 KV 文档。
+- **不支持 SMTP 和 TCP**：ESA 函数不能建立 TCP 连接，所以不支持 SMTP 邮件；TCP 类型的网站监控必须开启 Agent 探测。
+- **用量估算**：后台 **设置 → 通用设置** 会根据节点数和各项间隔，估算每日的函数请求数、KV 读写次数和存储量。实际计费和免费额度以 ESA 控制台为准。
 
 ## 本地开发
 
 ```bash
 npm ci
-npm run dev:frontend
-npm run dev:worker
+npm run build              # 构建前端和函数 bundle
+npm run dev                # 本地 ESA 模拟服务器 http://localhost:8787（KV 持久化到 .dev/kv.json）
+npm run dev:frontend       # Vite 开发服务器，/api 代理到 8787
 ```
 
 常用检查：
 
 ```bash
-npm run build:migrations
-npm run verify
-cd agent && go test ./...
+npm run verify             # lint + 构建 + JS/Go 测试 + 依赖安全检查
 ```
-
 
 ## 安全
 
-- 后台登录使用 HttpOnly 会话 Cookie，非安全写请求需要 CSRF 校验。
-- 登录失败会记录限流状态和审计日志。
-- Agent 使用节点 Token 认证，后台可轮换节点 Token。
-- Ping 与网站探测会拦截内网、回环、链路本地、组播、保留地址和元数据地址。
-- Supabase 迁移启用 RLS，并对 RPC 函数显式 `revoke` / `grant`；需要 `security definer` 的函数固定 `search_path`。
-- 忘记密码重置需要输入当前部署的 Supabase Secret key；该 key 只用于本次请求校验，不会被保存。
+- 后台登录使用 HttpOnly 会话 Cookie，非安全写请求需要 CSRF 校验，支持 TOTP 两步验证和敏感操作二次验证。
+- 登录失败按 IP 以及 IP + 账号两个维度限流，并记录审计日志。
+- Agent 使用节点 Token 认证（按哈希比对），后台可轮换节点 Token。
+- Ping 和网站探测会拦截内网、回环、链路本地、组播、保留地址和元数据地址。
+- 恢复密钥只在本次请求中比对，不会被保存。
 
 ## 许可证
 
-本项目使用 [MIT License](LICENSE)。
+本项目使用 [MIT License](LICENSE)，基于 [kadidalax/cf-vps-monitor](https://github.com/kadidalax/cf-vps-monitor)。
 
 ## 参考文档
 
-- [Cloudflare Deploy to Cloudflare buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/)
-- [Cloudflare Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
-- [Cloudflare Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/)
-- [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)
-- [Cloudflare Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/)
-- [Supabase Management API](https://supabase.com/docs/reference/api/introduction)
-- [Supabase API Keys](https://supabase.com/docs/guides/getting-started/api-keys)
-- [Supabase Migrating to new API keys](https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys)
-- [Supabase Data API Security](https://supabase.com/docs/guides/api/securing-your-api)
-
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=kadidalax%2Fcf-vps-monitor&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=kadidalax/cf-vps-monitor&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=kadidalax/cf-vps-monitor&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=kadidalax/cf-vps-monitor&type=date&legend=top-left" />
- </picture>
-</a>
+- [ESA 产品文档](https://help.aliyun.com/zh/edge-security-acceleration/esa/)
+- [ESA 函数和 Pages：构建与 esa.jsonc](https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/build-pages)
+- [ESA CLI（esa-cli）](https://www.npmjs.com/package/esa-cli)

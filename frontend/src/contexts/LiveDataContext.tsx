@@ -323,6 +323,9 @@ interface LiveDataProviderProps {
   viewer?: boolean;
 }
 
+/** 阿里云 ESA 函数不提供 WebSocket 服务端，实时数据全部走 HTTP 轮询。 */
+const LIVE_WEBSOCKET_ENABLED = false;
+
 export function LiveDataProvider({ children, enabled = true, viewer = true }: LiveDataProviderProps) {
   const { authLoading, isAuthenticated, user } = useAuth();
   const includeHidden = !authLoading && isAuthenticated;
@@ -394,7 +397,15 @@ export function LiveDataProvider({ children, enabled = true, viewer = true }: Li
     if (!enabled || !scope?.active || scope.owner !== scopeOwner) return;
     const request = scope.beginRead();
     try {
-      const res = await fetch(`/api/live/clients${includeHidden ? '?include_hidden=1' : ''}`, { cache: 'no-store' });
+      // ESA 版本没有 WebSocket：活跃观看窗口内带 viewer=active，服务端据此让 Agent 切到高频上报。
+      const params = new URLSearchParams();
+      if (includeHidden) params.set('include_hidden', '1');
+      const since = activeSinceRef.current;
+      if (viewer && typeof document !== 'undefined' && !document.hidden && since !== null && Date.now() - since < pollConfigRef.current.activeMaxDurationMs) {
+        params.set('viewer', 'active');
+      }
+      const query = params.toString();
+      const res = await fetch(`/api/live/clients${query ? `?${query}` : ''}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = normalizeLiveDataResponse(await res.json());
       if (!data) throw new Error('Invalid live data response');
@@ -412,7 +423,7 @@ export function LiveDataProvider({ children, enabled = true, viewer = true }: Li
         setLoading(false);
       }
     }
-  }, [authLoading, enabled, includeHidden, scopeOwner]);
+  }, [authLoading, enabled, includeHidden, scopeOwner, viewer]);
 
   const refresh = useCallback(() => {
     fetchLiveData();
@@ -580,7 +591,19 @@ export function LiveDataProvider({ children, enabled = true, viewer = true }: Li
     };
 
     const connect = async () => {
-      if (cancelled || typeof WebSocket === 'undefined') return;
+      if (cancelled) return;
+      if (!LIVE_WEBSOCKET_ENABLED || typeof WebSocket === 'undefined') {
+        // ESA 函数不支持 WebSocket：只用缓存的 bootstrap 快照做首屏，其余交给 HTTP 轮询。
+        const bootstrap = includeHidden ? null : getCachedPublicBootstrap();
+        const live = normalizeLiveDataResponse(bootstrap?.live);
+        const seeded = live ? scope.seed(live) : null;
+        if (seeded) {
+          rememberInitialLiveMetadataVersion(bootstrap?.metadata_version || live?.metadata_version);
+          setLiveData(seeded);
+          setLoading(false);
+        }
+        return;
+      }
       const connection = ++connectionRequest;
 
       let viewerToken = '';

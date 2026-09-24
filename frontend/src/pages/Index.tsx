@@ -179,9 +179,9 @@ export function ApiUnavailableNotice({ error }: { error: string }) {
           <AlertTriangle size={18} />
         </span>
         <Box>
-          <Text size="3" weight="bold" as="p">无法连接 Worker API</Text>
+          <Text size="3" weight="bold" as="p">无法连接 ESA 函数接口</Text>
           <Text size="2" color="gray" as="p">
-            请检查 Worker 是否已部署、Supabase Data API/RPC 是否已配置，以及本地开发时 Vite 是否正确代理到 Worker。
+            请检查 ESA 函数是否已部署、JWT_SECRET 与 KV_NAMESPACE 是否已配置（可访问 /db-init 自检），以及本地开发时 Vite 是否正确代理到本地函数。
           </Text>
           {showDetail && (
             <Text size="1" color="gray" as="p" style={{ marginTop: 6, fontFamily: 'var(--font-mono, monospace)' }}>

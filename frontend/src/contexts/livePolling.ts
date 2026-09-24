@@ -1,4 +1,4 @@
-export const LIVE_POLL_INTERVAL_ACTIVE = 3000;
+export const LIVE_POLL_INTERVAL_ACTIVE = 5000;
 export const LIVE_POLL_INTERVAL_IDLE = 2 * 60 * 1000;
 // 与 normalizeLivePollConfig 的默认值保持一致（此前是 10 分钟，与设置默认值不符）
 export const LIVE_POLL_ACTIVE_MAX_DURATION = 2 * 60 * 1000;
@@ -47,7 +47,7 @@ function secondsToMsSetting(
 
 export function normalizeLivePollConfig(settings: LivePollSettings | null | undefined): LivePollConfig {
   return {
-    activeIntervalMs: secondsToMsSetting(settings?.live_poll_active_interval_sec, 3, 3, 300),
+    activeIntervalMs: secondsToMsSetting(settings?.live_poll_active_interval_sec, 5, 3, 300),
     idleIntervalMs: secondsToMsSetting(settings?.live_poll_idle_interval_sec, 120, 60, 3600),
     activeMaxDurationMs: secondsToMsSetting(settings?.live_poll_active_max_duration_sec, 120, 60, 3600),
   };

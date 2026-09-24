@@ -12,7 +12,7 @@ function outcomes(host) {
   const task = { name: 'Synthetic target', all_clients: true, interval_sec: 120 };
   return {
     websiteHttp: validateWebsiteMonitorInput({ name: 'Synthetic', url: `https://${authority}` }).ok,
-    websiteTcp: validateWebsiteMonitorInput({ name: 'Synthetic', method: 'TCP', url: `tcp://${authority}:443` }).ok,
+    websiteTcp: validateWebsiteMonitorInput({ name: 'Synthetic', method: 'TCP', url: `tcp://${authority}:443`, agent_probe_mode: 'country_auto' }).ok,
     webhook: validateWebhookUrl(`https://${authority}/hook`).ok,
     pingIcmp: validatePingTaskInput({ ...task, type: 'icmp', target: host }).ok,
     pingTcp: validatePingTaskInput({ ...task, type: 'tcp', target: `${authority}:443` }).ok,

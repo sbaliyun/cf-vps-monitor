@@ -1,12 +1,11 @@
-import type * as db from '../db/queries';
-import { normalizeRecipients, sendSmtpEmail, type SmtpConfig, type SmtpResult } from './email.ts';
+type HealthDatabase = unknown;
 import type { NotificationMessage } from './notification-templates.ts';
 import { formatTelegramHtmlText, sendTelegramMessage } from './telegram.ts';
 import { sendWebhookMessage, type WebhookFormat, type WebhookSendResult } from './webhook.ts';
 import { isMaskedSecretPreview } from './secret-preview.ts';
 import type { StoredHealthComponent } from './observability.ts';
 import type { NotificationDeliveryClaim } from '../db/types.ts';
-import { consumeScheduledSubrequests, currentScheduledBudget, ScheduledBudgetExceeded } from './scheduled-budget.ts';
+import { ScheduledBudgetExceeded } from './scheduled-budget.ts';
 
 export async function deliverNotification(operations: {
   claim(): Promise<NotificationDeliveryClaim>;
@@ -94,7 +93,7 @@ export function pickNotificationSettingOverrides(value: unknown): Record<string,
 type HealthStatus = 'ok' | 'warning' | 'error' | 'disabled';
 
 type RecordHealth = (
-  database: db.QueryDatabase | undefined,
+  database: HealthDatabase | undefined,
   component: StoredHealthComponent,
   status: HealthStatus,
   detail?: unknown,
@@ -109,12 +108,10 @@ type RecordHealth = (
 ) => Promise<void>;
 
 type TelegramSender = typeof sendTelegramMessage;
-type EmailSender = typeof sendSmtpEmail;
 type WebhookSender = typeof sendWebhookMessage;
 
 type DispatchDependencies = {
   sendTelegram?: TelegramSender;
-  sendEmail?: EmailSender;
   sendWebhook?: WebhookSender;
   recordHealth?: RecordHealth;
 };
@@ -123,6 +120,8 @@ type DispatchOptions = {
   channel?: string;
   auditUser?: string;
   deps?: DispatchDependencies;
+  /** 受 ESA 子请求预算约束的 fetch。 */
+  fetcher?: typeof fetch;
 };
 
 type NotificationSettings = Record<string, string | undefined>;
@@ -145,7 +144,7 @@ function webhookFormat(value: string | undefined): WebhookFormat {
 
 async function record(
   deps: DispatchDependencies,
-  database: db.QueryDatabase | undefined,
+  database: HealthDatabase | undefined,
   component: StoredHealthComponent,
   status: HealthStatus,
   detail?: unknown,
@@ -155,11 +154,12 @@ async function record(
 }
 
 async function dispatchTelegram(
-  database: db.QueryDatabase | undefined,
+  database: HealthDatabase | undefined,
   settings: NotificationSettings,
   notification: NotificationMessage,
   deps: DispatchDependencies,
   auditUser?: string,
+  fetcher: typeof fetch = fetch,
 ): Promise<boolean> {
   const botToken = settings.telegram_bot_token || '';
   const chatId = settings.telegram_chat_id || '';
@@ -173,7 +173,7 @@ async function dispatchTelegram(
       text: formatTelegramHtmlText(notification.body),
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-    });
+    }, fetcher);
     if (response.body) await response.body.cancel().catch(() => undefined);
     if (!response.ok) {
       await record(deps, database, 'telegram', 'error', `Telegram HTTP ${response.status}`, {
@@ -195,51 +195,24 @@ async function dispatchTelegram(
 }
 
 async function dispatchEmail(
-  database: db.QueryDatabase | undefined,
-  settings: NotificationSettings,
-  notification: NotificationMessage,
+  database: HealthDatabase | undefined,
   deps: DispatchDependencies,
   auditUser?: string,
 ): Promise<boolean> {
-  try {
-    currentScheduledBudget()?.ensureCanStart(2);
-    consumeScheduledSubrequests(2); // Socket plus possible STARTTLS upgrade; conservative for implicit TLS.
-    const config: SmtpConfig = {
-      host: settings.email_smtp_host || '',
-      port: Number(settings.email_smtp_port || 587),
-      security: settings.email_smtp_security === 'tls' ? 'tls' : 'starttls',
-      username: settings.email_smtp_username || '',
-      password: settings.email_smtp_password || '',
-      fromAddress: settings.email_smtp_from_address || '',
-      fromName: settings.email_smtp_from_name || 'CF VPS Monitor',
-      recipients: normalizeRecipients(settings.email_smtp_recipients || ''),
-      authMethod: settings.email_smtp_auth_method === 'login' ? 'login' : 'plain',
-    };
-    const result: SmtpResult = await (deps.sendEmail || sendSmtpEmail)(config, notification.subject, notification.body);
-    if (result.ok) {
-      await record(deps, database, 'email', 'ok', 'SMTP notification sent', { successThrottleMs: 60 * 60 * 1000 });
-      return true;
-    }
-    await record(deps, database, 'email', 'error', `SMTP send failed: ${result.error}`, {
-      auditAction: 'email_error',
-      auditUser,
-    });
-  } catch (error) {
-    if (error instanceof ScheduledBudgetExceeded) throw error;
-    await record(deps, database, 'email', 'error', `SMTP send failed: ${errorDetail(error)}`, {
-      auditAction: 'email_error',
-      auditUser,
-    });
-  }
+  await record(deps, database, 'email', 'error', 'ESA 函数不能建立 SMTP 连接，请改用 Telegram 或 Webhook（可转发到邮件服务）', {
+    auditAction: 'email_error',
+    auditUser,
+  });
   return false;
 }
 
 async function dispatchWebhook(
-  database: db.QueryDatabase | undefined,
+  database: HealthDatabase | undefined,
   settings: NotificationSettings,
   notification: NotificationMessage,
   deps: DispatchDependencies,
   auditUser?: string,
+  fetcher: typeof fetch = fetch,
 ): Promise<boolean> {
   const url = settings.webhook_url || '';
   if (!url) {
@@ -257,7 +230,7 @@ async function dispatchWebhook(
     username: settings.webhook_username || undefined,
     password: settings.webhook_password || undefined,
     retryCount: Number(settings.webhook_retry_count || 1),
-  }, notification);
+  }, notification, { fetch: fetcher });
   if (result.ok) {
     await record(deps, database, 'webhook', 'ok', `Webhook notification sent: host=${result.host}; status=${result.status}`, {
       successThrottleMs: 60 * 60 * 1000,
@@ -276,7 +249,7 @@ async function dispatchWebhook(
 }
 
 export async function dispatchNotification(
-  database: db.QueryDatabase | undefined,
+  database: HealthDatabase | undefined,
   settings: NotificationSettings,
   notification: NotificationMessage,
   options: DispatchOptions = {},
@@ -288,11 +261,11 @@ export async function dispatchNotification(
       await record(deps, database, 'notification', 'disabled', 'notification_method is none');
       return false;
     case 'email':
-      return dispatchEmail(database, settings, notification, deps, options.auditUser);
+      return dispatchEmail(database, deps, options.auditUser);
     case 'webhook':
-      return dispatchWebhook(database, settings, notification, deps, options.auditUser);
+      return dispatchWebhook(database, settings, notification, deps, options.auditUser, options.fetcher);
     case 'telegram':
     default:
-      return dispatchTelegram(database, settings, notification, deps, options.auditUser);
+      return dispatchTelegram(database, settings, notification, deps, options.auditUser, options.fetcher);
   }
 }

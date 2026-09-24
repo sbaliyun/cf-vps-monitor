@@ -47,7 +47,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const githubUrl = CF_MONITOR_GITHUB_URL;
-  const [siteTitle, setSiteTitle] = useState("CF VPS Monitor");
+  const [siteTitle, setSiteTitle] = useState("ESA VPS Monitor");
   const [siteSubtitle, setSiteSubtitle] = useState<string | null>(null);
   const [siteLogoUrl, setSiteLogoUrl] = useState("");
   const [bgUrlDesktop, setBgUrlDesktop] = useState("");

@@ -21,7 +21,11 @@ export function formatTelegramHtmlText(value: unknown): string {
   return escapeTelegramHtml(String(value ?? '').slice(0, TELEGRAM_MESSAGE_MAX_CHARS));
 }
 
-export async function sendTelegramMessage(botToken: string, payload: TelegramSendMessagePayload): Promise<Response> {
+export async function sendTelegramMessage(
+  botToken: string,
+  payload: TelegramSendMessagePayload,
+  fetcher: typeof fetch = fetch,
+): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TELEGRAM_FETCH_TIMEOUT_MS);
   try {
@@ -30,7 +34,7 @@ export async function sendTelegramMessage(botToken: string, payload: TelegramSen
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: controller.signal,
-    });
+    }, fetcher);
   } finally {
     clearTimeout(timeoutId);
   }

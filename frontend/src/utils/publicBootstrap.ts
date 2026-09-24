@@ -233,6 +233,8 @@ export async function fetchPublicBootstrap(options: { cache?: RequestCache; cach
   const url = new URL('/api/public/bootstrap', typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
   if (options.cacheBust) url.searchParams.set('_fresh', String(Date.now()));
   if (includeHidden) url.searchParams.set('include_hidden', '1');
+  // 打开页面即视为有人在看：服务端据此让 Agent 切到高频上报（ESA 版本没有 WebSocket）。
+  if (typeof document !== 'undefined' && !document.hidden) url.searchParams.set('viewer', 'active');
   const promise: Promise<PublicBootstrapPayload> = fetchWithBootstrapRetry(`${url.pathname}${url.search}`, options.cache ? { cache: options.cache } : undefined)
     .then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

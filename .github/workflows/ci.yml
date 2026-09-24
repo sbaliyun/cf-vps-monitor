@@ -37,11 +37,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Both packages type-check here: frontend runs `tsc --noEmit`,
-      # worker runs `wrangler types --check && tsc --noEmit`.
+      # Both packages type-check here: frontend and worker both run `tsc --noEmit`.
       - name: Lint
         run: npm run lint
 
+      # Produces frontend/dist (Pages static assets) and worker/dist/esa-entry.js
+      # (the ESA function bundle referenced by esa.jsonc).
       - name: Build
         run: npm run build
 
@@ -89,8 +90,3 @@ jobs:
 
       - name: Dependency and toolchain security
         run: npm run security:check
-
-      - name: Check migration drift
-        run: |
-          npm run build:migrations
-          git diff --exit-code -- supabase/ worker/src/generated/

@@ -1,73 +1,44 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Badge, Box, Button, Card, Flex, Heading, Separator, Text, TextField } from '@radix-ui/themes';
-import { CheckCircle2, Database, KeyRound, Loader2, XCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import { Badge, Box, Button, Card, Flex, Heading, Separator, Text } from '@radix-ui/themes';
+import { AlertTriangle, CheckCircle2, Database, Loader2, RefreshCw, XCircle } from 'lucide-react';
 
-type InitInfo = {
+type SetupCheck = {
+  key: string;
+  status: 'ok' | 'warning' | 'error';
+  detail: string;
+};
+
+type SetupStatus = {
   ok: boolean;
-  project_ref?: string | null;
-  migration_count?: number;
+  platform?: string;
+  checks?: SetupCheck[];
 };
 
-type InitResult = {
-  success?: boolean;
-  project_ref?: string;
-  total?: number;
-  applied?: number;
-  skipped?: number;
-  results?: Array<{
-    version: string;
-    name: string;
-    status: 'applied' | 'skipped';
-  }>;
-  error?: string;
+const CHECK_LABELS: Record<string, string> = {
+  jwt_secret: '会话密钥 JWT_SECRET',
+  edge_kv: 'ESA 边缘存储（EdgeKV）',
+  admin: '管理员账号',
 };
 
-async function readJson(response: Response): Promise<InitResult> {
-  return response.json().catch(() => ({ error: response.statusText }));
-}
-
+/**
+ * 部署自检页（ESA 版本不需要初始化数据库）：
+ * 检查 JWT_SECRET 与 EdgeKV 命名空间是否可用，并提示首次创建管理员。
+ */
 export default function DbInit() {
-  const [info, setInfo] = React.useState<InitInfo | null>(null);
-  const [token, setToken] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
-  const [result, setResult] = React.useState<InitResult | null>(null);
+  const [status, setStatus] = React.useState<SetupStatus | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    fetch('/api/setup/database/init')
+  const load = React.useCallback(() => {
+    setLoading(true);
+    fetch('/api/setup/status', { cache: 'no-store' })
       .then((response) => response.json())
-      .then(setInfo)
-      .catch(() => setInfo({ ok: false }));
+      .then((body: SetupStatus) => setStatus(body))
+      .catch(() => setStatus({ ok: false, checks: [{ key: 'edge_kv', status: 'error', detail: '无法访问函数接口，请确认 ESA 函数已部署且路由正确' }] }))
+      .finally(() => setLoading(false));
   }, []);
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!token.trim()) {
-      toast.error('请输入 Supabase Access Token');
-      return;
-    }
-    setLoading(true);
-    setResult(null);
-    try {
-      const response = await fetch('/api/setup/database/init', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: token.trim() }),
-      });
-      const body = await readJson(response);
-      setResult(body);
-      if (!response.ok || !body.success) throw new Error(body.error || `HTTP ${response.status}`);
-      setToken('');
-      toast.success('数据库初始化完成');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '初始化失败');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const done = Boolean(result?.success);
+  React.useEffect(() => { load(); }, [load]);
 
   return (
     <div className="login-page db-init-page">
@@ -76,78 +47,49 @@ export default function DbInit() {
           <Box className="login-logo">
             <Database size={32} color="white" />
           </Box>
-          <Heading size="6">初始化数据库</Heading>
+          <Heading size="6">部署自检</Heading>
           <Text size="2" color="gray" align="center">
-            输入 1 小时有效的 Supabase Access Token，一键创建所需表、索引和 RPC。
+            ESA 版本使用边缘存储 KV，无需初始化数据库。以下检查通过后即可登录后台。
           </Text>
         </Flex>
 
         <Separator size="4" mb="4" />
 
-        <Flex className="db-init-meta" gap="2" wrap="wrap" mb="4">
-          <Badge color={info?.ok ? 'green' : 'red'} variant="soft">
-            项目: {info?.project_ref || '未识别'}
-          </Badge>
-          <Badge color="gray" variant="soft">
-            迁移: {info?.migration_count ?? '-'}
-          </Badge>
-        </Flex>
+        {loading && (
+          <Flex align="center" gap="2"><Loader2 className="db-init-spin" size={18} /><Text size="2">检查中…</Text></Flex>
+        )}
 
-        <form onSubmit={submit}>
-          <Flex direction="column" gap="4">
-            <label htmlFor="supabase-access-token">
-              <Text size="2" weight="bold" style={{ marginBottom: 6, display: 'inline-block' }}>
-                Supabase Access Token
+        {!loading && status && (
+          <Flex direction="column" gap="3">
+            <Badge color={status.ok ? 'green' : 'red'} variant="soft" style={{ width: 'fit-content' }}>
+              {status.ok ? '配置可用' : '配置未就绪'}
+            </Badge>
+            {(status.checks || []).map((check) => (
+              <Box key={check.key} className={`db-init-result ${check.status === 'ok' ? 'is-success' : check.status === 'warning' ? '' : 'is-error'}`}>
+                <Flex align="center" gap="2" mb="1">
+                  {check.status === 'ok' ? <CheckCircle2 size={18} /> : check.status === 'warning' ? <AlertTriangle size={18} /> : <XCircle size={18} />}
+                  <Text size="2" weight="bold">{CHECK_LABELS[check.key] || check.key}</Text>
+                </Flex>
+                <Text size="2">{check.detail}</Text>
+              </Box>
+            ))}
+            {!status.ok && (
+              <Text size="1" color="gray">
+                在 ESA 控制台「函数和 Pages → 项目 → 设置 → 环境变量」中配置 JWT_SECRET（至少 32 个字符）与 KV_NAMESPACE，
+                并确认已在「边缘存储」中创建同名命名空间，保存后重新部署。
               </Text>
-              <TextField.Root
-                id="supabase-access-token"
-                size="3"
-                type="password"
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-                placeholder="sbp_xxx"
-                autoComplete="off"
-                disabled={loading}
-              >
-                <TextField.Slot>
-                  <KeyRound size={16} />
-                </TextField.Slot>
-              </TextField.Root>
-            </label>
-
-            <Button type="submit" size="3" disabled={loading || !info?.ok} style={{ height: 44, fontWeight: 700 }}>
-              {loading ? <Loader2 className="db-init-spin" size={18} /> : <Database size={18} />}
-              {loading ? '正在初始化...' : '一键初始化数据库'}
-            </Button>
-          </Flex>
-        </form>
-
-        {result && (
-          <Box className={`db-init-result ${done ? 'is-success' : 'is-error'}`} mt="4">
-            <Flex align="center" gap="2" mb="2">
-              {done ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
-              <Text size="2" weight="bold">
-                {done ? `完成：新执行 ${result.applied ?? 0} 个，跳过 ${result.skipped ?? 0} 个` : '初始化失败'}
-              </Text>
-            </Flex>
-            {result.error && <Text size="2">{result.error}</Text>}
-            {done && (
-              <Flex direction="column" gap="1" className="db-init-log">
-                {(result.results || []).map((item) => (
-                  <Text size="1" key={item.version}>
-                    {item.status === 'applied' ? '执行' : '跳过'} {item.version}
-                  </Text>
-                ))}
-              </Flex>
             )}
-          </Box>
+          </Flex>
         )}
 
-        {done && (
-          <Button asChild size="3" variant="soft" mt="4" style={{ width: '100%' }}>
-            <Link to="/admin/login">进入后台登录</Link>
+        <Flex gap="2" mt="4">
+          <Button size="3" variant="soft" onClick={load} disabled={loading} style={{ flex: 1 }}>
+            <RefreshCw size={16} /> 重新检查
           </Button>
-        )}
+          <Button asChild size="3" style={{ flex: 1 }}>
+            <Link to="/login">进入后台登录</Link>
+          </Button>
+        </Flex>
       </Card>
     </div>
   );

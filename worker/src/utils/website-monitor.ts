@@ -2,7 +2,7 @@ import {
   buildWebsiteAlertNotification,
   buildWebsiteRecoveryNotification,
 } from './notification-templates.ts';
-import { consumeScheduledSubrequests, currentScheduledBudget, scheduledFetch, ScheduledBudgetExceeded } from './scheduled-budget.ts';
+import { scheduledFetch, ScheduledBudgetExceeded } from './scheduled-budget.ts';
 
 export type WebsiteMonitorStatus = 'pending' | 'up' | 'down' | 'paused';
 export type WebsiteMonitorMethod = 'GET' | 'HEAD' | 'TCP';
@@ -86,21 +86,11 @@ const IPV4_BLOCKS = [
 const REACHABLE_CHALLENGE_STATUSES = new Set([401, 403, 405, 412, 429]);
 const WEBSITE_CHECK_DUE_TOLERANCE_SECONDS = 30;
 const WEBSITE_PROBE_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (compatible; CF-VPS-Monitor/2.0; +https://cf-vps-monitor.local)',
+  'User-Agent': 'Mozilla/5.0 (compatible; ESA-VPS-Monitor/2.0; +https://github.com/sbaliyun/esa-vps-monitor)',
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
   'Cache-Control': 'no-cache',
 };
-
-type TcpSocket = {
-  opened: Promise<unknown>;
-  close(): Promise<void> | void;
-};
-
-type TcpConnector = (
-  address: { hostname: string; port: number },
-  options: { secureTransport: 'off'; allowHalfOpen: false },
-) => TcpSocket;
 
 function integerInRange(value: unknown, min: number, max: number): number | null {
   const number = Number(value);
@@ -232,6 +222,11 @@ export function validateWebsiteMonitorInput(input: Record<string, unknown>): Web
     return { ok: false, error: 'invalid_bounds' };
   }
 
+  // ESA 边缘函数无法发起 TCP 连接：TCP 监控必须交给 Agent 探测。
+  if (method === 'TCP' && agent_probe_mode === 'off') {
+    return { ok: false, error: 'tcp_requires_agent_probe' };
+  }
+
   return {
     ok: true,
     value: {
@@ -297,7 +292,11 @@ export function normalizeWebsiteFetchResult(input: WebsiteFetchNormalizationInpu
   };
 }
 
-export async function checkWebsiteMonitorTcp(monitor: WebsiteProbeMonitor, connector?: TcpConnector): Promise<{
+/**
+ * ESA 边缘函数不能建立原始 TCP 连接，TCP 监控只能由 Agent 探测。
+ * 这里返回明确的失败原因，调用方（定时维护）会跳过 TCP 监控。
+ */
+export async function checkWebsiteMonitorTcp(monitor: WebsiteProbeMonitor): Promise<{
   monitor_id: number;
   config_revision: string;
   checked_at: string;
@@ -309,70 +308,21 @@ export async function checkWebsiteMonitorTcp(monitor: WebsiteProbeMonitor, conne
   latency_ms: number;
   error: string | null;
 }> {
-  const started = Date.now();
-  const checkedAt = new Date(started).toISOString();
-  const configRevision = monitor.config_revision;
-  let socket: TcpSocket | null = null;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  try {
-    const url = new URL(monitor.url);
-    const urlError = validateTcpUrl(url);
-    if (urlError) throw new Error(urlError);
-    consumeScheduledSubrequests();
-    const connect = connector || ((await import('cloudflare:sockets')).connect as TcpConnector);
-    socket = connect(
-      { hostname: url.hostname, port: Number(url.port) },
-      { secureTransport: 'off', allowHalfOpen: false },
-    );
-    const timeout = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(currentScheduledBudget()?.remainingMs() === 0
-        ? new ScheduledBudgetExceeded() : new Error('timeout')),
-      Math.min(Math.max(1, monitor.timeout_sec) * 1000, currentScheduledBudget()?.remainingMs() ?? Infinity));
-    });
-    await Promise.race([socket.opened, timeout]);
-    if (timeoutId) clearTimeout(timeoutId);
-    await socket.close();
-    const latency_ms = Math.max(0, Math.round(Date.now() - started));
-    return {
-      monitor_id: monitor.id,
-      config_revision: configRevision,
-      checked_at: checkedAt,
-      ok: true,
-      effective_status: 'up',
-      effective_reason: 'tcp_connect',
-      status_code: null,
-      raw_status_code: null,
-      latency_ms,
-      error: null,
-    };
-  } catch (error) {
-    try { await socket?.close(); } catch {}
-    if (error instanceof ScheduledBudgetExceeded) throw error;
-    const normalized = normalizeWebsiteFetchResult({
-      latencyMs: Date.now() - started,
-      min: monitor.expected_status_min,
-      max: monitor.expected_status_max,
-      error,
-    });
-    return {
-      monitor_id: monitor.id,
-      config_revision: configRevision,
-      checked_at: checkedAt,
-      ok: false,
-      effective_status: 'down',
-      effective_reason: normalized.effective_reason,
-      status_code: null,
-      raw_status_code: null,
-      latency_ms: normalized.latency_ms,
-      error: normalized.error,
-    };
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
+  return {
+    monitor_id: monitor.id,
+    config_revision: monitor.config_revision,
+    checked_at: new Date().toISOString(),
+    ok: false,
+    effective_status: 'down',
+    effective_reason: 'tcp_requires_agent',
+    status_code: null,
+    raw_status_code: null,
+    latency_ms: 0,
+    error: 'tcp_requires_agent',
+  };
 }
 
-export async function checkWebsiteMonitorHttp(monitor: WebsiteProbeMonitor): Promise<{
+export async function checkWebsiteMonitorHttp(monitor: WebsiteProbeMonitor, fetcher: typeof fetch = fetch): Promise<{
   monitor_id: number;
   config_revision: string;
   checked_at: string;
@@ -402,7 +352,7 @@ export async function checkWebsiteMonitorHttp(monitor: WebsiteProbeMonitor): Pro
       redirect: 'manual',
       signal: controller.signal,
       headers: WEBSITE_PROBE_HEADERS,
-    });
+    }, fetcher);
     const location = response.headers.get('Location');
     if (response.body) await response.body.cancel().catch(() => undefined);
     if (location && response.status >= 300 && response.status <= 399) {

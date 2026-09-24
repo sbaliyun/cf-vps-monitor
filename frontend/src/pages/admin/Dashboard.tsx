@@ -463,7 +463,7 @@ function GenerateCommandDialog({ client, open, onOpenChange }: { client: Command
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="admin-command-dialog" style={{ maxWidth: 680 }}>
-        <Dialog.Title>生成 CF VPS Monitor Agent 安装命令</Dialog.Title>
+        <Dialog.Title>生成 Agent 安装命令</Dialog.Title>
         <Dialog.Description size="2" mb="2">节点: {client.name}</Dialog.Description>
         <SegmentedControl.Root value={platform} onValueChange={(v) => setPlatform(v as AgentInstallPlatform)} style={{ marginBottom: 12 }}>
           <SegmentedControl.Item value="unix">Unix 自动检测</SegmentedControl.Item>

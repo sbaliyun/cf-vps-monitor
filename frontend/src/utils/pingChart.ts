@@ -52,7 +52,7 @@ const pingSeriesColors = [
 ];
 
 const demoTaskColorOrder = [
-  'Demo - Cloudflare ICMP',
+  'Demo - Alibaba ICMP',
   'Demo - IPv6 DNS',
   'Demo - HTTPS 443',
 ];

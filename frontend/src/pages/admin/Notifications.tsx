@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Flex, Text, Button, TextField,
   Dialog, Badge, Switch, Table, Tabs, Select,
-  Box, Checkbox, TextArea,
+  Box, Checkbox, TextArea, Callout,
 } from '@radix-ui/themes';
 import { Plus, Pencil, Trash2, Search, Send, Save, Unplug, TrendingUp, Bell, CalendarClock } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import Loading from '../../components/Loading';
 import { useApi } from '../../contexts/AuthContext';
 import { useAdminAction } from '../../hooks/useAdminAction';
-import { SettingCard, SettingInput, SettingTextarea } from '../../components/admin/SettingCard';
+import { SettingCard, SettingInput } from '../../components/admin/SettingCard';
 import { summarizeSelectionValue } from '../../utils/batchPrefill';
 import { getChangedSettings, type SettingsMap } from '../../utils/settingsDiff';
 
@@ -110,10 +110,7 @@ export default function AdminNotifications() {
   const [settings, setSettings] = useState<SettingsMap>({});
   const [originalSettings, setOriginalSettings] = useState<SettingsMap>({});
   const [settingsSaving, setSettingsSaving] = useState(false);
-  const [testRecipient, setTestRecipient] = useState('');
-  const [testEmailSending, setTestEmailSending] = useState(false);
   const [testWebhookSending, setTestWebhookSending] = useState(false);
-  const [smtpOpen, setSmtpOpen] = useState(false);
   const [telegramOpen, setTelegramOpen] = useState(false);
   const [webhookOpen, setWebhookOpen] = useState(false);
   const clientsRef = useRef<NotificationClient[]>([]);
@@ -121,7 +118,6 @@ export default function AdminNotifications() {
   const clientsLoadPromiseRef = useRef<Promise<NotificationClient[]> | null>(null);
 
   const syncChannelCards = useCallback((method: string) => {
-    setSmtpOpen(method === 'email');
     setTelegramOpen(method === 'telegram');
     setWebhookOpen(method === 'webhook');
   }, []);
@@ -625,7 +621,7 @@ export default function AdminNotifications() {
       const result = await apiFetch('/admin/test/sendMessage', {
         method: 'POST',
         body: JSON.stringify({
-          message: 'CF VPS Monitor 测试消息 - 通知配置成功!',
+          message: 'ESA VPS Monitor 测试消息 - 通知配置成功!',
           channel: 'telegram',
           settings,
         }),
@@ -640,30 +636,6 @@ export default function AdminNotifications() {
     }
   });
 
-  const sendTestEmail = async () => {
-    setTestEmailSending(true);
-    try {
-      const result = await apiFetch('/admin/test/sendMessage', {
-        method: 'POST',
-        body: JSON.stringify({
-          channel: 'email',
-          message: 'CF VPS Monitor 测试消息 - 邮件通知配置成功!',
-          test_recipient: testRecipient.trim(),
-          settings,
-        }),
-      });
-      if (result.success) {
-        toast.success('测试邮件已发送');
-      } else {
-        toast.error(result.error || '发送失败');
-      }
-    } catch {
-      toast.error('发送失败');
-    } finally {
-      setTestEmailSending(false);
-    }
-  };
-
   const sendTestWebhook = async () => {
     setTestWebhookSending(true);
     try {
@@ -671,7 +643,7 @@ export default function AdminNotifications() {
         method: 'POST',
         body: JSON.stringify({
           channel: 'webhook',
-          message: 'CF VPS Monitor 测试消息 - Webhook 通知配置成功!',
+          message: 'ESA VPS Monitor 测试消息 - Webhook 通知配置成功!',
           settings,
         }),
       });
@@ -699,14 +671,14 @@ export default function AdminNotifications() {
         ? '自定义模式可留空'
         : '当前平台通常不需要 Secret';
   const notificationMethodLabel = notificationMethod === 'email'
-    ? 'SMTP 邮件'
+    ? 'SMTP 邮件（不可用）'
     : notificationMethod === 'webhook'
       ? 'Webhook'
       : notificationMethod === 'none'
         ? '关闭'
         : 'Telegram';
   const notificationMethodBadgeColor = notificationMethod === 'email'
-    ? 'blue'
+    ? 'red'
     : notificationMethod === 'webhook'
       ? 'amber'
       : notificationMethod === 'none'
@@ -802,7 +774,9 @@ export default function AdminNotifications() {
                         <Select.Content>
                           <Select.Item value="none">关闭</Select.Item>
                           <Select.Item value="telegram">Telegram</Select.Item>
-                          <Select.Item value="email">SMTP 邮件</Select.Item>
+                          {notificationMethod === 'email' && (
+                            <Select.Item value="email" disabled>SMTP 邮件（ESA 不支持）</Select.Item>
+                          )}
                           <Select.Item value="webhook">Webhook</Select.Item>
                         </Select.Content>
                       </Select.Root>
@@ -811,123 +785,14 @@ export default function AdminNotifications() {
                   </div>
                 </SettingCard>
 
-                <SettingCard
-                  title="SMTP 邮件通知"
-                  description="发件服务器、账号和默认收件人"
-                  open={smtpOpen}
-                  onOpenChange={setSmtpOpen}
-                >
-                    <div className="notification-email-form-grid">
-                      <div className="notification-email-connection-grid">
-                        <div className="notification-email-host">
-                          <SettingInput
-                            label="SMTP Host"
-                            value={settings.email_smtp_host || ''}
-                            onChange={(value) => updateSetting('email_smtp_host', value)}
-                            placeholder="smtp.example.com"
-                            width="24ch"
-                          />
-                        </div>
-                        <div className="notification-email-port">
-                          <SettingInput
-                            label="Port"
-                            value={settings.email_smtp_port || '587'}
-                            onChange={(value) => updateSetting('email_smtp_port', value)}
-                            type="number"
-                            width="8ch"
-                          />
-                        </div>
-                        <label className="notification-email-field notification-email-security">
-                          <Text className="notification-email-label" size="2" weight="medium">安全模式</Text>
-                          <Select.Root
-                            value={settings.email_smtp_security || 'starttls'}
-                            onValueChange={(value) => updateSetting('email_smtp_security', value)}
-                          >
-                            <Select.Trigger />
-                            <Select.Content>
-                              <Select.Item value="starttls">STARTTLS (587)</Select.Item>
-                              <Select.Item value="tls">隐式 TLS (465)</Select.Item>
-                            </Select.Content>
-                          </Select.Root>
-                        </label>
-                        <label className="notification-email-field notification-email-auth">
-                          <Text className="notification-email-label" size="2" weight="medium">认证方式</Text>
-                          <Select.Root
-                            value={settings.email_smtp_auth_method || 'plain'}
-                            onValueChange={(value) => updateSetting('email_smtp_auth_method', value)}
-                          >
-                            <Select.Trigger />
-                            <Select.Content>
-                              <Select.Item value="plain">PLAIN</Select.Item>
-                              <Select.Item value="login">LOGIN</Select.Item>
-                            </Select.Content>
-                          </Select.Root>
-                        </label>
-                      </div>
-                      <div className="notification-email-identity-grid">
-                        <div>
-                          <SettingInput
-                            label="用户名"
-                            value={settings.email_smtp_username || ''}
-                            onChange={(value) => updateSetting('email_smtp_username', value)}
-                            placeholder="user@example.com"
-                            width="32ch"
-                          />
-                        </div>
-                        <div>
-                          <SettingInput
-                            label="密码"
-                            type="password"
-                            value={settings.email_smtp_password || ''}
-                            onChange={(value) => updateSetting('email_smtp_password', value)}
-                            placeholder={settings.email_smtp_password_preview
-                              ? `${settings.email_smtp_password_preview}（留空则不修改）`
-                              : (settings.email_smtp_password_set === 'true' ? '已保存密码，留空则不修改' : 'SMTP 密码或授权码')}
-                            width="34ch"
-                          />
-                        </div>
-                        <div>
-                          <SettingInput
-                            label="发件人邮箱"
-                            value={settings.email_smtp_from_address || ''}
-                            onChange={(value) => updateSetting('email_smtp_from_address', value)}
-                            placeholder="monitor@example.com"
-                            width="32ch"
-                          />
-                        </div>
-                        <div>
-                          <SettingInput
-                            label="发件人名称"
-                            value={settings.email_smtp_from_name || 'CF VPS Monitor'}
-                            onChange={(value) => updateSetting('email_smtp_from_name', value)}
-                            width="18ch"
-                          />
-                        </div>
-                      </div>
-                      <div className="notification-email-recipients">
-                        <SettingTextarea
-                          label="收件地址"
-                          description="支持逗号、分号或换行分隔，最多 20 个"
-                          value={settings.email_smtp_recipients || ''}
-                          onChange={(value) => updateSetting('email_smtp_recipients', value)}
-                          rows={3}
-                          placeholder={'admin@example.com\nops@example.com'}
-                        />
-                      </div>
-                      <div className="notification-email-test-row" aria-label="SMTP 测试">
-                        <TextField.Root
-                          className="notification-email-test-input"
-                          size="1"
-                          placeholder="测试收件人，留空使用默认收件地址"
-                          value={testRecipient}
-                          onChange={(event) => setTestRecipient(event.target.value)}
-                        />
-                        <Button size="1" className="notification-email-test-button" variant="soft" onClick={sendTestEmail} disabled={testEmailSending}>
-                          <Send size={13} /> {testEmailSending ? '发送中…' : 'SMTP 测试'}
-                        </Button>
-                      </div>
-                    </div>
-                </SettingCard>
+                {notificationMethod === 'email' && (
+                  <Callout.Root color="amber" size="1">
+                    <Callout.Text>
+                      当前通道为 SMTP 邮件（多半来自旧版备份）。ESA 函数不能建立 SMTP 连接，这个通道发不出任何通知。
+                      请改用 Telegram，或用 Webhook 转发到邮件服务（如 Resend、SendGrid 或阿里云邮件推送的 HTTP 接口）。
+                    </Callout.Text>
+                  </Callout.Root>
+                )}
 
                 <SettingCard
                   title="Telegram 通知"

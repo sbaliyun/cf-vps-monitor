@@ -39,11 +39,17 @@ export async function readRequestBytesWithLimit(request: Request, maxBytes: numb
   return { ok: true, bytes };
 }
 
-export async function readJsonWithLimit(request: Request, maxBytes: number): Promise<LimitedJsonResult> {
+export async function readJsonWithLimit(
+  request: Request,
+  maxBytes: number,
+  options: { emptyValue?: unknown } = {},
+): Promise<LimitedJsonResult> {
   const body = await readRequestBytesWithLimit(request, maxBytes);
   if (!body.ok) return body;
+  const text = new TextDecoder().decode(body.bytes);
+  if (text.trim() === '' && 'emptyValue' in options) return { ok: true, body: options.emptyValue };
   try {
-    return { ok: true, body: JSON.parse(new TextDecoder().decode(body.bytes)) };
+    return { ok: true, body: JSON.parse(text) };
   } catch {
     return { ok: false, reason: 'invalid_json' };
   }

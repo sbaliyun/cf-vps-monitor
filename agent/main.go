@@ -477,7 +477,7 @@ func init() {
 	flag.StringVar(&serverURL, "server", "", "Worker URL, for example https://cf-vps-monitor.example.workers.dev")
 	flag.IntVar(&reportInterval, "interval", 120, "Report interval in seconds")
 	flag.StringVar(&clientName, "name", "", "Optional node name override")
-	flag.StringVar(&reportMode, "mode", "websocket", "Report mode: websocket or http")
+	flag.StringVar(&reportMode, "mode", "http", "Report mode: http (default, required for Alibaba Cloud ESA) or websocket")
 	flag.IntVar(&reconnectInterval, "reconnect-interval", 5, "WebSocket reconnect interval in seconds")
 	flag.IntVar(&pingInterval, "ping-interval", defaultPingIntervalSec, "Ping task poll interval in seconds")
 	flag.IntVar(&trafficResetDay, "traffic-reset-day", 1, "Monthly traffic reset day for network totals, from 1 to 31")
