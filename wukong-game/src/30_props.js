@@ -1745,6 +1745,11 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     roof(b, { faces, y0: 2.98, D: az, H: 0.34, th: 0.1, sp: 0.25, rowSeg: 1.2, gridU: 2, gridD: az, rafters: false, underKey: 'plaster', fasciaKey: 'stone', ridgeInset: 0.08 });
     const rp = [[-L / 2, 3.33, 0], [L / 2, 3.33, 0]];
     lineRidge(b, rp, 0.2, 0.16, 'tile', false);
+    // gable end caps so free-standing wall ends read closed
+    for (const s of [-1, 1]) {
+      const cap = extrudeZY([[-az, 2.86], [az, 2.86], [az, 2.9], [0, 3.36], [-az, 2.9]], 0.05);
+      T(cap, s > 0 ? L / 2 - 0.05 : -L / 2, 0, 0); uvProj(cap, UVS.stone); b.add('stone', cap);
+    }
     res.colliders.push(boxC(0, 0, L / 2, (t + 0.12) / 2 + 0.05));
     return finish(b, res, 'Wall');
   }
