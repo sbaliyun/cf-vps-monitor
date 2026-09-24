@@ -1,5 +1,5 @@
 {
-  "name": "cf-vps-monitor-frontend",
+  "name": "esa-vps-monitor-frontend",
   "private": true,
   "license": "MIT",
   "type": "module",

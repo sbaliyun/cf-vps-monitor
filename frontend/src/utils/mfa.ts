@@ -50,7 +50,7 @@ export function normalizeMfaCode(value: string, method: MfaMethod): string | nul
 
 export function formatRecoveryCodesText(codes: string[], username: string): string {
   return [
-    'CF VPS Monitor 双重身份验证恢复码',
+    'ESA VPS Monitor 双重身份验证恢复码',
     `账户: ${username}`,
     '',
     '每个恢复码只能使用一次。请离线安全保存。',
@@ -65,7 +65,7 @@ export function downloadRecoveryCodes(codes: string[], username: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'cf-vps-monitor-recovery-codes.txt';
+  link.download = 'esa-vps-monitor-recovery-codes.txt';
   link.click();
   URL.revokeObjectURL(url);
 }

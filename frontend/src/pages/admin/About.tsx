@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { CF_MONITOR_REPOSITORY } from '../../utils/projectLinks';
 import { Flex, Card, Text, Heading, Badge, Grid, Box, Button, TextField, Tabs } from '@radix-ui/themes';
-import { Activity, Bell, Cloud, Code2, Database, Github, Monitor, ShieldCheck, Server, Zap } from 'lucide-react';
+import { Activity, Bell, Cloud, Code2, Database, Monitor, ShieldCheck, Server, Zap } from 'lucide-react';
 import { formatAppVersion } from '../../utils/version';
 import { useApi } from '../../contexts/AuthContext';
 
@@ -31,10 +32,10 @@ interface UpdateSettings {
 }
 
 const stackItems = [
-  { icon: Cloud, title: 'Cloudflare Workers', text: 'API 入口、前端托管与部署运行时' },
-  { icon: Zap, title: 'Durable Objects', text: '实时数据、WebSocket 与在线状态协调' },
-  { icon: Database, title: 'Supabase HTTP API', text: '配置、历史记录、备份与审计日志' },
-  { icon: Code2, title: 'Hono + TypeScript', text: 'Worker 后端路由、鉴权与接口校验' },
+  { icon: Cloud, title: 'ESA 函数和 Pages', text: 'API 入口、前端托管与边缘运行时' },
+  { icon: Zap, title: 'HTTP 轮询 + 请求触发维护', text: '实时数据、在线状态与定时告警（无需 WebSocket 与 Cron）' },
+  { icon: Database, title: 'ESA 边缘存储（EdgeKV）', text: '配置、历史记录、告警状态与审计日志' },
+  { icon: Code2, title: 'Hono + TypeScript', text: '边缘函数路由、鉴权与接口校验' },
   { icon: Monitor, title: 'React + Radix UI', text: '后台管理、公开状态页与图表展示' },
   { icon: Server, title: 'Go Agent', text: 'VPS 端采集、Ping、网站探测与上报' },
 ];
@@ -44,13 +45,13 @@ const coreFeatures = [
   '节点温度：支持 Linux CPU/SoC 传感器；无有效读数时显示不可用',
   '流量按节点重置日逐月统计，重启不影响累计',
   '自定义 Ping 任务与延迟图表',
-  '网站监控，支持 Worker / Agent 检测',
+  '网站监控，支持边缘函数 / Agent 检测',
   '公开状态页，支持 monitor / aurora 主题',
   '节点标签、分组、排序、对游客隐藏',
 ];
 
 const opsFeatures = [
-  'Telegram / Email 告警',
+  'Telegram / Webhook 告警',
   '离线、到期、负载阈值通知',
   '后台一键安装命令生成',
   '站点 Logo 上传与主题配置',
@@ -172,17 +173,14 @@ export default function AdminAbout() {
                   <Monitor size={40} color="white" />
                 </Box>
                 <Box style={{ minWidth: 0, flex: 1 }}>
-                  <Heading size="6">CF VPS Monitor</Heading>
-                  <Text as="p" size="2" color="gray" mt="1">基于 Cloudflare Workers 的轻量 VPS 探针与公开状态页</Text>
+                  <Heading size="6">ESA VPS Monitor</Heading>
+                  <Text as="p" size="2" color="gray" mt="1">基于阿里云 ESA 函数和 Pages 的轻量 VPS 探针与公开状态页</Text>
                   <Flex gap="2" wrap="wrap" mt="2">
                     <Badge size="2" color="blue">{formatAppVersion(version?.version)}</Badge>
                     <Badge size="2" variant="soft" color="gray">{displayedHash}</Badge>
-                    <Badge size="2" variant="soft" color="green">Cloudflare Workers</Badge>
+                    <Badge size="2" variant="soft" color="green">Alibaba Cloud ESA</Badge>
                   </Flex>
                 </Box>
-                <Button variant="soft" onClick={() => openExternal('https://github.com/kadidalax/cf-vps-monitor')} aria-label="GitHub">
-                  <Github size={16} />
-                </Button>
               </Flex>
             </Card>
 
@@ -225,7 +223,7 @@ export default function AdminAbout() {
                 <Heading size="3">项目定位</Heading>
               </Flex>
               <Text size="2" color="gray" className="admin-about-position">
-                面向个人和小团队的自托管 VPS 监控面板，优先追求轻量部署、公开状态展示、低维护成本和 Cloudflare 免费生态友好。
+                面向个人和小团队的自托管 VPS 监控面板，优先追求轻量部署、公开状态展示、低维护成本，部署在阿里云 ESA 边缘网络上，无需自建数据库。
                 适合轻量 VPS 探针、公开服务状态页、节点资产管理、基础告警与日常运维巡检。
               </Text>
             </Card>
@@ -242,7 +240,7 @@ export default function AdminAbout() {
                 </Box>
 
                 <Text size="1" className="admin-about-warning">
-                  当前只支持 Fork 仓库通过 GitHub Sync fork 同步更新。一键部署自动创建的仓库不保证包含更新工作流，已不再作为后台更新方式。
+                  推荐 Fork 本仓库并在 ESA「函数和 Pages」中导入该 Fork；在 GitHub 上点击 Sync fork 后，ESA 会自动重新构建部署。
                 </Text>
 
                 <Box>
@@ -257,12 +255,12 @@ export default function AdminAbout() {
                     }))}
                   />
                   <Text as="p" size="1" color="gray" mt="1">
-                    填写当前 Worker 连接并部署的 Fork 仓库地址，不是官方更新源。
+                    填写 ESA 项目连接并部署的 Fork 仓库地址，不是官方更新源。
                   </Text>
                 </Box>
 
                 <Flex align="center" justify="between" gap="3" wrap="wrap" mt="auto">
-                  <Text size="1" color="gray">更新源：kadidalax/cf-vps-monitor/main</Text>
+                  <Text size="1" color="gray">更新源：{CF_MONITOR_REPOSITORY}/main</Text>
                   <Flex align="center" gap="2">
                     {updateSettingsMessage && (
                       <Text size="1" color={updateSettingsMessage === '已保存' ? 'green' : 'red'}>{updateSettingsMessage}</Text>

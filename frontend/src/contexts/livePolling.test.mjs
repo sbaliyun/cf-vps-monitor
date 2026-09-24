@@ -77,7 +77,7 @@ assert.equal(
 // --- 配置归一化与边界裁剪 ---
 const defaults = normalizeLivePollConfig(undefined);
 assert.deepEqual(defaults, {
-  activeIntervalMs: 3_000,
+  activeIntervalMs: 5_000,
   idleIntervalMs: 120_000,
   activeMaxDurationMs: 120_000,
 });

@@ -1,8 +1,5 @@
 import { Hono } from 'hono';
-import type { Context } from 'hono';
-import type { Bindings, Variables } from '../index';
-import * as db from '../db/queries';
-import { getDatabase } from '../db/provider';
+import type * as db from '../db/types';
 import {
   base64ToBytes,
   buildThemeCss,
@@ -12,12 +9,16 @@ import {
   validateThemeConfig,
 } from '../utils/theme-package';
 import { readJsonWithLimit, readRequestBytesWithLimit } from '../utils/request-body';
-import { invalidatePublicMetadataCache } from './public';
+import { adminSettingsOf, mutateCore, readCore } from '../store/core';
+import type { CoreDoc, StoredTheme } from '../store/types';
+import { deleteThemeBundles, planThemeBundles, readThemeAsset, writeThemeBundles } from '../store/themes';
+import { queueAudit } from '../services/notify';
+import { services, type AppContext, type HonoEnv } from './common';
 
-type ThemeContext = Context<{ Bindings: Bindings; Variables: Variables }>;
+type ThemeContext = AppContext;
 
-export const adminThemeRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-export const publicThemeRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+export const adminThemeRoutes = new Hono<HonoEnv>();
+export const publicThemeRoutes = new Hono<HonoEnv>();
 
 const MAX_THEME_ZIP_BYTES = 2 * 1024 * 1024;
 const MAX_THEME_JSON_BYTES = 256 * 1024;
@@ -107,7 +108,7 @@ function builtinThemeRecord(short: typeof BUILTIN_THEMES[number]['short']): db.T
     short: builtin.short,
     description: builtin.description,
     version: '',
-    author: 'CF VPS Monitor',
+    author: 'ESA VPS Monitor',
     url: '',
     preview: '',
     style: BUILTIN_STYLE_PATH,
@@ -121,7 +122,7 @@ function builtinThemeRecord(short: typeof BUILTIN_THEMES[number]['short']): db.T
     name: builtin.name,
     description: builtin.description,
     version: '',
-    author: 'CF VPS Monitor',
+    author: 'ESA VPS Monitor',
     url: '',
     preview_path: '',
     style_path: BUILTIN_STYLE_PATH,
@@ -129,14 +130,6 @@ function builtinThemeRecord(short: typeof BUILTIN_THEMES[number]['short']): db.T
     config_json: '{}',
     custom_css: '',
   };
-}
-
-async function ensureBuiltinTheme(database: ReturnType<typeof getDatabase>, short: typeof BUILTIN_THEMES[number]['short']): Promise<db.Theme> {
-  const existing = await db.getTheme(database, short);
-  if (existing) return existing;
-  const builtin = { theme: builtinThemeRecord(short) };
-  await db.upsertTheme(database, builtin.theme, []);
-  return { ...builtin.theme, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
 }
 
 function themeSummary(theme: db.Theme, activeTheme: string) {
@@ -150,7 +143,7 @@ function themeSummary(theme: db.Theme, activeTheme: string) {
     author: theme.author,
     url: theme.url,
     preview_path: theme.preview_path,
-    preview_url: builtin ? builtinThemePreviewUrl(theme.short) : theme.preview_path ? `/api/theme/assets/${encodeURIComponent(theme.short)}/${theme.preview_path}` : '',
+    preview_url: builtin ? builtinThemePreviewUrl(theme.short) : theme.preview_path ? themeFileUrl(theme.short, theme.preview_path) : '',
     active: activeTheme === theme.short,
     deletable: !builtin,
     configurable: true,
@@ -191,45 +184,42 @@ function themeAssetHeaders(contentType: string): HeadersInit {
   };
 }
 
+function findTheme(core: CoreDoc, short: string): StoredTheme | null {
+  return core.themes.find(theme => theme.short === short) ?? null;
+}
+
+function activeThemeOf(core: CoreDoc): string {
+  return normalizeActiveTheme(adminSettingsOf(core).active_theme);
+}
+
+function audit(c: ThemeContext, action: string, detail: string): void {
+  queueAudit(services(c), c.get('username') || 'admin', action, detail);
+}
+
 adminThemeRoutes.get('/', async (c) => {
-  const database = getDatabase(c.env);
-  const [activeTheme, themes] = await Promise.all([
-    db.getSetting(database, 'active_theme').then(normalizeActiveTheme),
-    db.listThemes(database),
-  ]);
-  const themeMap = new Map(themes.map(theme => [theme.short, theme]));
+  const core = await readCore(services(c), 0);
+  const activeTheme = activeThemeOf(core);
+  const themeMap = new Map(core.themes.map(theme => [theme.short, theme]));
   const builtinSummaries = BUILTIN_THEMES.map(theme => builtinThemeSummary(theme.short, activeTheme, themeMap.get(theme.short)));
-  // 退场主题在 themes 表里可能残留记录（配置过主题时 ensureBuiltinTheme 会写入）。
-  // 失去内置身份后它们会混进"上传主题"列表，还带一个可用的删除按钮，必须挡掉。
-  const uploadedSummaries = themes
+  const uploadedSummaries = core.themes
     .filter(theme => !isReservedThemeShort(theme.short))
     .map(theme => themeSummary(theme, activeTheme));
-  return c.json({
-    active_theme: activeTheme,
-    data: [...builtinSummaries, ...uploadedSummaries],
-  });
+  return c.json({ active_theme: activeTheme, data: [...builtinSummaries, ...uploadedSummaries] });
 });
 
 adminThemeRoutes.post('/upload', async (c) => {
   const body = await readRequestBytesWithLimit(c.req.raw, MAX_THEME_ZIP_BYTES + 4096);
-  if (!body.ok) {
-    return c.json({ error: `主题包不能超过 ${MAX_THEME_ZIP_BYTES} 字节` }, 413);
-  }
-
+  if (!body.ok) return c.json({ error: `主题包不能超过 ${MAX_THEME_ZIP_BYTES} 字节` }, 413);
   let form: FormData;
   try {
-    form = await new Response(body.bytes, {
-      headers: { 'Content-Type': c.req.header('Content-Type') || '' },
-    }).formData();
+    form = await new Response(body.bytes, { headers: { 'Content-Type': c.req.header('Content-Type') || '' } }).formData();
   } catch {
     return c.json({ error: '主题包表单格式错误' }, 400);
   }
   const file = form.get('file');
   if (!isUploadedFile(file)) return c.json({ error: '请上传主题 zip 文件' }, 400);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes.byteLength > MAX_THEME_ZIP_BYTES) {
-    return c.json({ error: `主题包不能超过 ${MAX_THEME_ZIP_BYTES} 字节` }, 413);
-  }
+  if (bytes.byteLength > MAX_THEME_ZIP_BYTES) return c.json({ error: `主题包不能超过 ${MAX_THEME_ZIP_BYTES} 字节` }, 413);
   let parsed: ReturnType<typeof parseThemeZip>;
   try {
     parsed = parseThemeZip(bytes);
@@ -238,20 +228,28 @@ adminThemeRoutes.post('/upload', async (c) => {
     return c.json({ error: `主题包解析失败: ${detail}` }, 400);
   }
   if (isReservedThemeShort(parsed.theme.short)) return c.json({ error: '不能覆盖内置主题' }, 400);
+  const plan = planThemeBundles(parsed.theme.short, parsed.assets);
+  if ('error' in plan) return c.json({ error: plan.error }, 413);
 
-  const database = getDatabase(c.env);
-  const existing = await db.getTheme(database, parsed.theme.short);
+  const app = services(c);
+  const before = await readCore(app, 0);
+  const existing = findTheme(before, parsed.theme.short);
   if (existing) {
     const manifest = normalizeThemeManifest(JSON.parse(parsed.theme.manifest_json));
     const validated = validateThemeConfig(manifest, jsonParseObject(existing.config_json));
     parsed.theme.config_json = JSON.stringify(validated.ok ? validated.config : jsonParseObject(parsed.theme.config_json));
     parsed.theme.custom_css = existing.custom_css;
   }
-
-  await db.upsertTheme(database, parsed.theme, parsed.assets);
-  invalidatePublicMetadataCache();
-  await db.insertAuditLog(database, c.get('username')!, 'theme_upload', `上传主题: ${parsed.theme.short}`);
-  return c.json({ success: true, theme: themeSummary({ ...parsed.theme, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, await db.getSetting(database, 'active_theme') || 'default') });
+  await writeThemeBundles(app, plan.bundles);
+  const now = new Date(app.now()).toISOString();
+  const stored: StoredTheme = { ...parsed.theme, assets: plan.refs, created_at: existing?.created_at || now, updated_at: now };
+  const activeTheme = await mutateCore(app, (core) => {
+    core.themes = [...core.themes.filter(theme => theme.short !== stored.short), stored];
+    return activeThemeOf(core);
+  }, { bumpMeta: true });
+  if (existing) await deleteThemeBundles(app, existing, new Set(plan.bundles.map(bundle => bundle.key)));
+  audit(c, 'theme_upload', `上传主题: ${stored.short}`);
+  return c.json({ success: true, theme: themeSummary(stored, activeTheme) });
 });
 
 adminThemeRoutes.post('/set', async (c) => {
@@ -259,13 +257,13 @@ adminThemeRoutes.post('/set', async (c) => {
   if ('response' in parsed) return parsed.response;
   const short = normalizeActiveTheme(typeof parsed.body.short === 'string' ? parsed.body.short.trim() : '');
   if (!/^[A-Za-z0-9_-]+$/.test(short)) return c.json({ error: '主题 ID 无效' }, 400);
-  const database = getDatabase(c.env);
-  if (!isBuiltinTheme(short) && !await db.getTheme(database, short)) {
-    return c.json({ error: '主题不存在' }, 404);
-  }
-  await db.setSetting(database, 'active_theme', short);
-  invalidatePublicMetadataCache();
-  await db.insertAuditLog(database, c.get('username')!, 'theme_set', `启用主题: ${short}`);
+  const ok = await mutateCore(services(c), (core) => {
+    if (!isBuiltinTheme(short) && !findTheme(core, short)) return false;
+    core.settings.active_theme = short;
+    return true;
+  }, { bumpMeta: true });
+  if (!ok) return c.json({ error: '主题不存在' }, 404);
+  audit(c, 'theme_set', `启用主题: ${short}`);
   return c.json({ success: true, active_theme: short });
 });
 
@@ -278,76 +276,133 @@ adminThemeRoutes.post('/settings', async (c) => {
   if (new TextEncoder().encode(customCss).byteLength > MAX_THEME_CUSTOM_CSS_BYTES) {
     return c.json({ error: `自定义 CSS 不能超过 ${MAX_THEME_CUSTOM_CSS_BYTES} 字节` }, 413);
   }
-  const database = getDatabase(c.env);
-  const theme = isBuiltinTheme(short) ? await ensureBuiltinTheme(database, short) : await db.getTheme(database, short);
-  if (!theme) return c.json({ error: '主题不存在' }, 404);
-  const manifest = normalizeThemeManifest(JSON.parse(theme.manifest_json));
-  const config = validateThemeConfig(manifest, parsed.body.config);
-  if (!config.ok) return c.json({ error: config.error }, 400);
-  await db.updateThemeSettings(database, short, JSON.stringify(config.config), customCss);
-  invalidatePublicMetadataCache();
-  await db.insertAuditLog(database, c.get('username')!, 'theme_settings', `配置主题: ${short}`);
+  const app = services(c);
+  const result = await mutateCore(app, (core) => {
+    let theme = findTheme(core, short);
+    if (!theme && isBuiltinTheme(short)) {
+      const now = new Date(app.now()).toISOString();
+      theme = { ...builtinThemeRecord(short), assets: [], created_at: now, updated_at: now };
+      core.themes.push(theme);
+    }
+    if (!theme) return { error: '主题不存在', status: 404 as const };
+    const manifest = normalizeThemeManifest(JSON.parse(theme.manifest_json));
+    const config = validateThemeConfig(manifest, parsed.body.config);
+    if (!config.ok) throw new ThemeConfigError(config.error);
+    theme.config_json = JSON.stringify(config.config);
+    theme.custom_css = customCss;
+    theme.updated_at = new Date(app.now()).toISOString();
+    return { ok: true as const };
+  }, { bumpMeta: true }).catch((error: unknown) => {
+    if (error instanceof ThemeConfigError) return { error: error.message, status: 400 as const };
+    throw error;
+  });
+  if ('error' in result) return c.json({ error: result.error }, result.status);
+  audit(c, 'theme_settings', `配置主题: ${short}`);
   return c.json({ success: true });
 });
+
+class ThemeConfigError extends Error {}
 
 adminThemeRoutes.post('/delete', async (c) => {
   const parsed = await readJsonObject(c);
   if ('response' in parsed) return parsed.response;
   const short = normalizeActiveTheme(typeof parsed.body.short === 'string' ? parsed.body.short.trim() : '');
   if (!/^[A-Za-z0-9_-]+$/.test(short) || isBuiltinTheme(short)) return c.json({ error: '内置主题不能删除' }, 400);
-  const database = getDatabase(c.env);
-  const activeTheme = normalizeActiveTheme(await db.getSetting(database, 'active_theme'));
-  const deleted = await db.deleteTheme(database, short);
-  if (!deleted) return c.json({ error: '主题不存在' }, 404);
-  if (activeTheme === short) await db.setSetting(database, 'active_theme', 'monitor');
-  invalidatePublicMetadataCache();
-  await db.insertAuditLog(database, c.get('username')!, 'theme_delete', `删除主题: ${short}`);
-  return c.json({ success: true, active_theme: activeTheme === short ? 'monitor' : activeTheme });
+  const app = services(c);
+  const result = await mutateCore(app, (core) => {
+    const theme = findTheme(core, short);
+    if (!theme) return null;
+    const activeTheme = activeThemeOf(core);
+    core.themes = core.themes.filter(item => item.short !== short);
+    if (activeTheme === short) core.settings.active_theme = 'monitor';
+    return { theme, activeTheme: activeTheme === short ? 'monitor' : activeTheme };
+  }, { bumpMeta: true });
+  if (!result) return c.json({ error: '主题不存在' }, 404);
+  await deleteThemeBundles(app, result.theme);
+  audit(c, 'theme_delete', `删除主题: ${short}`);
+  return c.json({ success: true, active_theme: result.activeTheme });
 });
 
-publicThemeRoutes.get('/active.css', async (c) => {
+/**
+ * ESA 会把带扩展名（.css、.webp…）的路径当作静态资源处理，不存在时直接 404 而不进函数，
+ * 所以主题样式与资源另提供不带扩展名的地址：/api/theme/active 与 /api/theme/file/<主题>?path=<文件>。
+ * 旧地址保留，供本地开发和其他运行时使用。
+ */
+export function themeFileUrl(short: string, path: string): string {
+  return `/api/theme/file/${encodeURIComponent(short)}?path=${encodeURIComponent(path)}`;
+}
+
+/** 把主题 CSS 里写死的 /api/theme/assets/<主题>/<文件> 改写为不带扩展名的地址。 */
+export function rewriteThemeAssetUrls(css: string): string {
+  return css.replace(/\/api\/theme\/assets\/([A-Za-z0-9_-]+)\/([^)'"\s?#]+)/g, (_match, short: string, path: string) => {
+    let decoded = path;
+    try {
+      decoded = decodeURIComponent(path);
+    } catch {
+      // 保留原样
+    }
+    return themeFileUrl(short, decoded);
+  });
+}
+
+async function activeThemeCss(c: AppContext): Promise<Response> {
   try {
-    const database = getDatabase(c.env);
-    const activeTheme = normalizeActiveTheme(await db.getSetting(database, 'active_theme'));
-    const theme = await db.getTheme(database, activeTheme);
+    const app = services(c);
+    const core = await readCore(app);
+    const activeTheme = activeThemeOf(core);
+    const theme = findTheme(core, activeTheme);
     if (!theme) return cssResponse('');
-    const asset = isBuiltinTheme(theme.short) ? null : await db.getThemeAsset(database, theme.short, theme.style_path);
+    const asset = isBuiltinTheme(theme.short) ? null : await readThemeAsset(app, theme, theme.style_path);
     if (!asset && !isBuiltinTheme(theme.short)) return cssResponse('');
-    return cssResponse(buildThemeCss({
+    return cssResponse(rewriteThemeAssetUrls(buildThemeCss({
       styleCss: asset ? new TextDecoder().decode(base64ToBytes(asset.content_base64)) : '',
       config: jsonParseObject(theme.config_json),
       customCss: theme.custom_css,
-    }));
+    })));
   } catch {
     return cssResponse('');
   }
-});
+}
 
-publicThemeRoutes.get('/assets/:theme/*', async (c) => {
-  const theme = c.req.param('theme');
-  if (!/^[A-Za-z0-9_-]+$/.test(theme)) return c.json({ error: 'Not Found' }, 404);
+publicThemeRoutes.get('/active.css', activeThemeCss);
+publicThemeRoutes.get('/active', activeThemeCss);
+
+async function serveThemeFile(c: AppContext, short: string, rawPath: string): Promise<Response> {
+  if (!/^[A-Za-z0-9_-]+$/.test(short)) return c.json({ error: 'Not Found' }, 404);
   let path: string;
   try {
-    path = normalizeThemePath(c.req.param('*'));
+    path = normalizeThemePath(rawPath);
   } catch {
     return c.json({ error: 'Not Found' }, 404);
   }
-  const asset = await db.getThemeAsset(getDatabase(c.env), theme, path);
+  const app = services(c);
+  const core = await readCore(app);
+  const theme = findTheme(core, short);
+  const asset = theme ? await readThemeAsset(app, theme, path) : null;
   if (!asset) return c.json({ error: 'Not Found' }, 404);
-  return new Response(base64ToBytes(asset.content_base64), {
-    headers: themeAssetHeaders(asset.content_type),
-  });
+  return new Response(base64ToBytes(asset.content_base64), { headers: themeAssetHeaders(asset.content_type) });
+}
+
+publicThemeRoutes.get('/file/:theme', (c) => serveThemeFile(c, c.req.param('theme'), c.req.query('path') || ''));
+
+publicThemeRoutes.get('/assets/:theme/*', (c) => {
+  const short = c.req.param('theme');
+  const prefix = `/api/theme/assets/${short}/`;
+  let raw = '';
+  try {
+    raw = c.req.path.startsWith(prefix) ? decodeURIComponent(c.req.path.slice(prefix.length)) : '';
+  } catch {
+    return c.json({ error: 'Not Found' }, 404);
+  }
+  return serveThemeFile(c, short, raw);
 });
 
 publicThemeRoutes.get('/manifest/:theme', async (c) => {
   const short = normalizeActiveTheme(c.req.param('theme'));
-  if (isBuiltinTheme(short)) return publicJson(builtinThemeSummary(short, short, await db.getTheme(getDatabase(c.env), short) || undefined));
+  const core = await readCore(services(c));
+  if (isBuiltinTheme(short)) return publicJson(builtinThemeSummary(short, short, findTheme(core, short) || undefined));
   if (!/^[A-Za-z0-9_-]+$/.test(short)) return c.json({ error: 'Not Found' }, 404);
-  const theme = await db.getTheme(getDatabase(c.env), short);
+  const theme = findTheme(core, short);
   if (!theme) return c.json({ error: 'Not Found' }, 404);
-  return publicJson({
-    short: theme.short,
-    manifest: safeManifest(theme.manifest_json),
-    config: jsonParseObject(theme.config_json),
-  });
+  return publicJson({ short: theme.short, manifest: safeManifest(theme.manifest_json), config: jsonParseObject(theme.config_json) });
 });

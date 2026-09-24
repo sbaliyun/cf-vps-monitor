@@ -15,7 +15,7 @@ param(
   [ValidateRange(1, 31)]
   [int]$TrafficResetDay = 1,
   [ValidateSet("websocket", "http")]
-  [string]$Mode = "websocket",
+  [string]$Mode = "http",
   [Alias("i")]
   [string]$InstanceId = "",
   [string]$InstallDir = "",
@@ -236,7 +236,7 @@ function Assert-AgentSystemResources {
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repository = "kadidalax/cf-vps-monitor"
+$repository = "sbaliyun/esa-vps-monitor"
 $branch = "main"
 $autoBinaryUrl = $false
 

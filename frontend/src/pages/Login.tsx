@@ -148,7 +148,7 @@ export default function Login() {
   const handleRecoverySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recoveryKey || !recoveryUsername || !recoveryPassword) {
-      toast.error('请填写 Supabase Secret key、用户名和新密码');
+      toast.error('请填写恢复密钥、用户名和新密码');
       return;
     }
 
@@ -157,7 +157,7 @@ export default function Login() {
       const payload: Record<string, string> = {
         username: recoveryUsername,
         password: recoveryPassword,
-        supabase_secret_key: recoveryKey,
+        recovery_key: recoveryKey,
       };
       const response = await fetch('/api/admin/recovery', {
         method: 'POST',
@@ -193,10 +193,10 @@ export default function Login() {
             <img src={siteLogoUrl || '/app-icon.png'} alt="" />
           </Box>
           <Heading size="6" style={{ fontSize: '1.5rem', letterSpacing: '-0.02em', fontWeight: 700 }}>
-            CF VPS Monitor
+            ESA VPS Monitor
           </Heading>
           <Text size="2" color="gray" style={{ marginTop: '-2px' }}>
-            Cloudflare 服务器监控探针
+            阿里云 ESA 服务器监控探针
           </Text>
         </Flex>
 
@@ -325,13 +325,13 @@ export default function Login() {
             <Flex direction="column" gap="4">
               <label htmlFor="recovery-secret-key">
                 <Text size="2" weight="bold" style={{ marginBottom: 6, display: 'inline-block' }}>
-                  Supabase Secret key
+                  恢复密钥
                 </Text>
                 <TextField.Root
                   id="recovery-secret-key"
                   size="3"
                   type="password"
-                  placeholder="请输入 Supabase Secret key"
+                  placeholder="部署时设置的 ADMIN_RECOVERY_KEY（未设置则为 JWT_SECRET）"
                   value={recoveryKey}
                   onChange={(e) => setRecoveryKey(e.target.value)}
                   autoComplete="off"
@@ -423,7 +423,7 @@ export default function Login() {
       </Card>
 
       <Text size="1" color="gray" style={{ position: 'fixed', bottom: 16, textAlign: 'center' }}>
-        CF VPS Monitor {version} &middot; Powered by Cloudflare Workers
+        ESA VPS Monitor {version} &middot; Powered by Alibaba Cloud ESA
       </Text>
     </div>
   );

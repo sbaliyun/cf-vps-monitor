@@ -215,6 +215,8 @@ export function buildAgentInstallCommand({
       if (trafficResetDay !== '1') args.push('-r', trafficResetDay);
       if (effectiveNodeName) args.push('-n', effectiveNodeName);
       args.push('-i', effectiveInstanceId);
+      // ESA 函数不支持 WebSocket 服务端：Agent 固定使用 HTTP 上报。
+      args.push('--mode', 'http');
       if (installMode) args.push('--install-mode', installMode);
       if (binaryUrl) args.push('--binary-url', binaryUrl);
       if (checksumUrl) args.push('--checksum-url', checksumUrl);
@@ -237,6 +239,7 @@ export function buildAgentInstallCommand({
       if (trafficResetDay !== '1') args.push('-r', trafficResetDay);
       if (effectiveNodeName) args.push('-n', effectiveNodeName);
       args.push('-i', effectiveInstanceId);
+      args.push('-Mode', 'http');
       if (binaryUrl) args.push('-BinaryUrl', binaryUrl);
       if (checksumUrl) args.push('-ChecksumUrl', checksumUrl);
       if (releaseTag && !binaryUrl) args.push('-ReleaseTag', releaseTag);

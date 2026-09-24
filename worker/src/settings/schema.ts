@@ -32,7 +32,7 @@ export const REMOVED_SETTING_KEYS = new Set([
 export const SETTING_SCHEMA = {
   site_title: {
     type: 'string',
-    defaultValue: 'CF VPS Monitor',
+    defaultValue: 'ESA VPS Monitor',
     public: true,
     maxLength: 128,
   },
@@ -53,6 +53,21 @@ export const SETTING_SCHEMA = {
     defaultValue: 'zh-CN',
     public: true,
     maxLength: 32,
+  },
+  // 负责检查 HTTPS 证书到期时间的节点：auto 自动选第一个在线且支持的 Agent，off 关闭，或填节点 UUID。
+  ssl_probe_client: {
+    type: 'string',
+    defaultValue: 'auto',
+    public: false,
+    maxLength: 64,
+  },
+  ssl_expiry_notify_days: {
+    type: 'integer',
+    // 证书剩余天数不超过该值时每天提醒一次；0 表示不提醒。
+    defaultValue: '14',
+    public: false,
+    min: 0,
+    max: 90,
   },
   script_domain: {
     type: 'string',
@@ -106,13 +121,10 @@ export const SETTING_SCHEMA = {
   },
   record_persist_interval_sec: {
     type: 'integer',
-    // 保持 120。这里的值必须与 1_core_schema.sql 的 seed 一致——seed 写的是真实行，
-    // buildAdminSettings 取 stored[key] ?? defaultValue，两者不一致时改这里毫无效果。
-    // 另：本项目的写入量受 max(上报间隔, 节流间隔) 约束，空闲态 120s 上报才是约束项；
-    // 一旦上采样功能落地，调低这个值会直接把写入量推到 2880 行/节点·天而超出免费额度。
+    // 历史点间隔。每个间隔每节点写一次 KV（节点历史文档），调低会增加 KV 写入次数。
     defaultValue: '120',
     public: false,
-    min: 3,
+    min: 30,
     max: 3600,
   },
   ping_record_persist_interval_sec: {
@@ -155,7 +167,8 @@ export const SETTING_SCHEMA = {
   },
   live_poll_active_interval_sec: {
     type: 'integer',
-    defaultValue: '3',
+    // 有人查看实时面板时 Agent 的上报间隔。ESA 每次上报都是一次函数请求 + KV 写入，默认 5 秒。
+    defaultValue: '5',
     public: true,
     min: 3,
     max: 300,
@@ -178,6 +191,7 @@ export const SETTING_SCHEMA = {
     type: 'enum',
     defaultValue: 'telegram',
     public: false,
+    // email 仅为兼容旧备份保留：ESA 函数无法建立 SMTP 连接，保存设置时会被拒绝。
     values: ['telegram', 'email', 'webhook', 'none'],
   },
   telegram_bot_token: {
@@ -235,7 +249,7 @@ export const SETTING_SCHEMA = {
   },
   email_smtp_from_name: {
     type: 'string',
-    defaultValue: 'CF VPS Monitor',
+    defaultValue: 'ESA VPS Monitor',
     public: false,
     maxLength: 128,
   },
