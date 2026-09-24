@@ -1476,11 +1476,11 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     seeded(hashStr('keeper'));
     const b = new Batch(), res = newRes();
     const pw = 2.6, pd = 2.0, ph = 0.45; // plinth
-    const pl = box(pw, ph, pd); T(pl, 0, ph / 2, -0.25); uvProj(pl, UVS.ashlar, 0.2, 0.3); b.add('ashlar', pl);
+    const pl = box(pw, ph, pd); T(pl, 0, ph / 2, -0.25); uvProj(pl, UVS.stone, 0.2, 0.3); b.add('stone', pl);
     const pc = box(pw + 0.1, 0.1, pd + 0.1); T(pc, 0, ph - 0.03, -0.25); addP(b, 'stone', pc, 0.1);
     const st = box(1.4, 0.2, 0.45); T(st, 0, 0.1, 0.95); addP(b, 'stone', st, 0.12);
     // body: brick walls, open front niche
-    const bw = 1.9, bd = 1.35, bh = 1.45, y0 = ph, zc = -0.35, t = 0.24;
+    const bw = 1.9, bd = 1.35, bh = 1.38, y0 = ph, zc = -0.35, t = 0.24;
     const back = box(bw, bh, t); T(back, 0, y0 + bh / 2, zc - bd / 2 + t / 2); addP(b, 'brick', back, 0.05);
     for (const s of [-1, 1]) { const sw = box(t, bh, bd); T(sw, s * (bw / 2 - t / 2), y0 + bh / 2, zc); addP(b, 'brick', sw, 0.05); }
     // front pillars + lintel
@@ -1528,7 +1528,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     }
     // roof (small hip roof)
     const ov = 0.42, ax = bw / 2 + ov, az = bd / 2 + ov;
-    hallRoof(b, { type: 'hip', ax, az, pitch: 0.95, ov, soffit: y0 + bh + 0.36, th: 0.16, ridgeW: 0.18, ridgeH: 0.2, curl: 0.06, tipS: 0.3, beasts: 0, ridgeCurve: 0.04, chiwenS: 0.55,
+    hallRoof(b, { type: 'hip', ax, az, pitch: 0.85, ov, soffit: y0 + bh + 0.36, th: 0.16, ridgeW: 0.18, ridgeH: 0.2, curl: 0.06, tipS: 0.3, beasts: 0, ridgeCurve: 0.04, chiwenS: 0.5,
       roof: { L: 0.22, lam: 0.4, lamD: 0.35, L2: 0.05, lam2: 1.2, lamD2: 0.6, F: 0.05, sp: 0.2, gridU: 0.2, gridD: 0.2, rowSeg: 0.4, rafters: false, underKey: 'painted', fasciaKey: 'painted', underTint: [sl(0.3), sl(0.2), sl(0.14)] } });
     // bronze incense pot in front, on a stone block
     const pz = 1.5;
@@ -1662,7 +1662,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
   function buildTempleGate({ width = 16, plaque = '观音禅院' } = {}) {
     seeded(hashStr('gate' + width));
     const b = new Batch(), res = newRes();
-    const hw = width / 2, cz = 3.1, baseH = 0.1;
+    const hw = width / 2, cz = 3.1, baseH = 0.06;
     // low paving
     const pv = box(width + 0.4, baseH, 2 * cz + 1.2); T(pv, 0, baseH / 2 - 0.02, 0); uvProj(pv, UVS.flag, 0.1, 0.2); b.add('flag', pv);
     const colH = 6.2, colR = 0.3, top = baseH + colH;
@@ -1951,12 +1951,12 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     st(prism(N, 0.42, 0.4, 0.14, rot), 0);
     st(prism(N, 0.34, 0.26, 0.12, rot), 0.14);
     st(lathe([[0.26, 0], [0.3, 0.03], [0.22, 0.1], [0.15, 0.13]], 12), 0.26);
-    st(prism(N, 0.14, 0.12, 0.6, rot), 0.38);
-    st(cyl(0.16, 0.16, 0.05, 12), 0.66);
-    st(prism(N, 0.2, 0.36, 0.1, rot), 0.98);
-    st(prism(N, 0.36, 0.34, 0.06, rot), 1.08);
+    st(prism(N, 0.14, 0.12, 0.45, rot), 0.38);
+    st(cyl(0.16, 0.16, 0.05, 12), 0.58);
+    st(prism(N, 0.2, 0.36, 0.1, rot), 0.83);
+    st(prism(N, 0.36, 0.34, 0.06, rot), 0.93);
     // firebox: 6 posts, 3 openings (front, back-left, back-right) + 3 panels
-    const fb0 = 1.14, fbh = 0.38, rr = 0.26;
+    const fb0 = 0.99, fbh = 0.38, rr = 0.26;
     for (let k = 0; k < N; k++) {
       const a = rot + k * TAU / N;
       const p = box(0.07, fbh, 0.07); T(p, Math.cos(a) * rr, fb0 + fbh / 2, Math.sin(a) * rr, -a); uvProj(p, 1); b.add('stone', p);
@@ -2205,7 +2205,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
       }
       g.computeVertexNormals(); uvProj(g, UVS.plaster, rnd(0, 3), 0);
       T(g, x, H / 2, z, yaw, 0, rnd(-0.06, 0.06)); b.add('plaster', g);
-      const sk = box(L + 0.05, 0.6, t + 0.08); T(sk, x, 0.3, z, yaw); addP(b, 'ashlar', sk, 0.05);
+      const sk = box(L + 0.05, 0.6, t + 0.08); T(sk, x, 0.3, z, yaw); addP(b, 'stone', sk, 0.05);
       res.colliders.push(boxC(x, z, L / 2, t / 2 + 0.05, yaw));
     }
     // fallen beam
@@ -2219,7 +2219,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     for (let k = 0; k < 26; k++) {
       const s = rnd(0.08, 0.45), x = rnd(-4, 4), z = rnd(-4, 4);
       const g = rock(s, k + seed * 31); T(g, x, s * 0.3, z, rnd(0, 3), rnd(-0.3, 0.3), rnd(-0.3, 0.3), 1, rnd(0.5, 0.9), rnd(0.8, 1.2));
-      addP(b, rnd() < 0.6 ? 'stone' : 'ashlar', g, 0.25);
+      addP(b, 'stone', g, 0.3);
       if (s > 0.38) res.colliders.push(circleC(x, z, s * 0.9));
     }
     // scattered roof tiles (curved shells)
