@@ -513,7 +513,7 @@ const Props = (() => {
       g.fillStyle = '#141b24'; g.fillRect(26, 26, W - 52, H - 52);
       const n = text.length, fs = Math.min((W - 80) / n / 1.08, (H - 60) * 0.86);
       const tg = g.createLinearGradient(0, H / 2 - fs / 2, 0, H / 2 + fs / 2);
-      tg.addColorStop(0, '#ecd48a'); tg.addColorStop(0.55, '#c49a4a'); tg.addColorStop(1, '#8a6428');
+      tg.addColorStop(0, '#f6e09a'); tg.addColorStop(0.55, '#d8ae58'); tg.addColorStop(1, '#a07634');
       drawChars(g, text, W / 2, H / 2 + fs * 0.03, fs, false, tg, 'rgba(0,0,0,0.75)');
       weatherCanvas(g, W, H, 0.75, 151);
     });
@@ -659,8 +659,9 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
   }
 
   const V2 = (x, y) => new THREE.Vector2(x, y);
+  let VC = true; // builder meshes carry baked vertex colours (AO / tints); exported materials do not
   function std(p, wx) {
-    const m = new THREE.MeshStandardMaterial(Object.assign({ vertexColors: true }, p));
+    const m = new THREE.MeshStandardMaterial(Object.assign({ vertexColors: VC }, p));
     if (wx) weather(m, wx);
     return m;
   }
@@ -707,8 +708,16 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     MATS[key] = m;
     return m;
   }
-  const materials = {};
-  for (const k of Object.keys(MAT_DEFS)) Object.defineProperty(materials, k, { get: () => MAT(k), enumerable: true });
+  // Public dictionary: same textures / weathering as the builders, but without the vertex-colour
+  // requirement so the game can put them on any geometry. Created lazily on first access.
+  const materials = {}, EXPORTED = {};
+  for (const k of Object.keys(MAT_DEFS)) Object.defineProperty(materials, k, {
+    enumerable: true,
+    get: () => {
+      if (!EXPORTED[k]) { VC = false; try { EXPORTED[k] = MAT_DEFS[k](); EXPORTED[k].name = k; } finally { VC = true; } }
+      return EXPORTED[k];
+    },
+  });
 
   // UV scale (repeats per metre) per material for projected UVs
   const UVS = { stone: 0.5, ashlar: 0.5, brick: 1, flag: 0.34, wood: 0.8, lacquer: 0.7, plaster: 0.5, painted: 0.6, statue: 0.6, iron: 0.8, bronze: 0.8, dark: 1, tile: 0.6, tileStone: 0.6 };
@@ -1002,8 +1011,10 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     return g;
   }
   function roof(b, R0) {
-    const R = Object.assign({ L: 0, lam: 1.5, lamD: 1, L2: 0, lam2: 4, lamD2: 2, F: 0, sp: 0.3, th: 0.3, tileKey: 'tile', underKey: 'wood', fasciaKey: 'wood', rafterKey: 'painted',
+    const R = Object.assign({ L: 0, lam: 1.5, lamD: 1, L2: 0, lam2: 4, lamD2: 2, F: 0, sp: 0.3, th: 0.3, tileKey: 'tile', underKey: 'painted', fasciaKey: 'painted', rafterKey: 'painted',
       rows: true, discs: true, rafters: true, fascia: true, under: true, gridU: 0.6, gridD: 0.55, rowSeg: 0.7, vScale: 1 / 2.4, ridgeInset: 0.12, underTint: null, tileTint: null, rafterSp: 0.38, rafterLen: 0.75 }, R0);
+    // default soffit: iron-oxide red boards (望板), fascia darker
+    if (!R.underTint && R.underKey === 'painted') R.underTint = [sl(0.4), sl(0.19), sl(0.14)];
     const rf = makeRoofFns(R);
     const { surf, ext, frame } = rf;
     for (const f of R.faces) {
@@ -1253,7 +1264,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
       lineRidge(b, rp, ridgeW, ridgeH, key);
       if (o.chiwen !== false) {
         const cw = chiwenGeo(ridgeH * 2.6 * (o.chiwenS || 1), ridgeW * 0.9);
-        for (const side of [-1, 1]) { const g = cw.clone(); T(g, side * (gext - 0.35), yR + o.ridgeCurve + ridgeH * 0.5, 0, side > 0 ? 0 : PI); tint(g, 0.52, 0.6, 0.55); b.add(key, g); }
+        for (const side of [-1, 1]) { const g = cw.clone(); T(g, side * (gext - 0.35), yR + o.ridgeCurve + ridgeH * 0.5, 0, side > 0 ? 0 : PI); tint(g, 0.4, 0.46, 0.42); b.add(key, g); }
       }
       return { rf, y0, H, yR, ridgeTop: yR + ridgeH, gx, gext, dsk, faces };
     }
@@ -1274,7 +1285,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
       lineRidge(b, rp, ridgeW, ridgeH, key);
       if (o.chiwen !== false) {
         const cw = chiwenGeo(ridgeH * 2.4 * (o.chiwenS || 1), ridgeW * 0.85);
-        for (const side of [-1, 1]) { const g = cw.clone(); T(g, side * (rx - 0.05), yR + (o.ridgeCurve || 0) + ridgeH * 0.5, 0, side > 0 ? 0 : PI); tint(g, 0.52, 0.6, 0.55); b.add(key, g); }
+        for (const side of [-1, 1]) { const g = cw.clone(); T(g, side * (rx - 0.05), yR + (o.ridgeCurve || 0) + ridgeH * 0.5, 0, side > 0 ? 0 : PI); tint(g, 0.4, 0.46, 0.42); b.add(key, g); }
       }
     }
     return { rf, y0, H, yR, ridgeTop: yR + ridgeH, faces };
@@ -2065,7 +2076,7 @@ float wxNoise(vec3 x) { vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 -
     const p1 = prism(8, 1.3, 1.35, 0.2, PI / 8); T(p1, 0, 0.35, 0); S(p1); b.add('statue', p1);
     const core = lathe([[0, 0.55], [1.15, 0.55], [1.2, 0.62], [0.95, 0.8], [1.05, 1.0], [1.2, 1.12], [1.22, 1.2], [0, 1.2]], 24); S(core); erode(core, 0.02, 2.5); b.add('statue', core);
     const petal = new THREE.SphereGeometry(1, 10, 8);
-    { const p = petal.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) * (1 - Math.max(0, y) * 0.8) * (1 + Math.min(0, y) * 0.3)); p.setZ(i, p.getZ(i) + (y > 0 ? y * y * 0.6 : 0)); } petal.computeVertexNormals(); }
+    { const p = petal.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) * (1 - Math.max(0, y) * 0.8) * (1 + Math.min(0, y) * 0.3)); p.setZ(i, p.getZ(i) + (y > 0 ? y * y * 0.3 : 0)); } petal.computeVertexNormals(); }
     for (const [n, r, y, tilt, sy, down] of [[18, 1.14, 0.72, 0.55, 0.22, true], [18, 1.1, 1.0, -0.5, 0.27, false], [18, 0.98, 1.1, -0.25, 0.22, false]]) {
       for (let k = 0; k < n; k++) {
         const a = (k + (down ? 0 : 0.5)) * TAU / n;

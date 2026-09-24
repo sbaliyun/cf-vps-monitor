@@ -466,9 +466,12 @@ class Enemy extends Actor {
     if (this.bladeFire > 0.5 && this.alive) {
       if (!this.fireLight) { this.fireLight = World.reserveLight(); }
       for (const y of [1.2, -1.2]) {
-        if (Math.random() < dt * 40) {
-          const p = this.rig.weaponPoint(y * (0.75 + Math.random() * 0.4), U.tmpV[15]);
-          FX.flame(p, 0.7, 1.6);
+        let n = dt * 110;
+        while (n > 0) {
+          if (n < 1 && Math.random() > n) break;
+          n -= 1;
+          const p = this.rig.weaponPoint(y * (0.72 + Math.random() * 0.5), U.tmpV[15]);
+          FX.flame(p, 0.85, 1.7);
           if (Math.random() < 0.2) FX.ember(p, 0.5);
         }
       }

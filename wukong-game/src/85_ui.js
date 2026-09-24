@@ -40,6 +40,7 @@ const UI = (() => {
   function showBoss(e) { bossRef = e; el.bossName.textContent = e.name; el.boss.classList.add('on'); }
   function hideBoss() { bossRef = null; el.boss.classList.remove('on'); }
   function bossCard(name, epi, dur = 3.2) {
+    hintsT = 0;
     el.bossTitle.textContent = name; el.bossEpi.textContent = epi;
     el.bossCard.classList.add('on');
     setTimeout(() => el.bossCard.classList.remove('on'), dur * 1000);
